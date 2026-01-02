@@ -1,0 +1,7 @@
+.gradle
+*.class
+*.log
+*.tmp
+*.swp
+
+*.jar
