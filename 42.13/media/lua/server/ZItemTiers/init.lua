@@ -3,7 +3,7 @@
 
 require "ZItemTiers/core"
 require "ZItemTiers/items"
-require "ZItemTiers/durability"
+require "ZItemTiers/spawn_hooks"
 
 -- Apply rarities after distributions are merged
 local function applyLootRarities()

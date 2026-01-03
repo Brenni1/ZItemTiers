@@ -1,29 +1,21 @@
 -- Inventory display for item rarity
 -- Changes item text color in inventory panes based on rarity (without affecting icons)
--- Supports CleanUI mod
+-- Supports CleanUI mod (if CleanUI is active, it handles coloring, so we skip this)
 
 require "ZItemTiers/core"
 
--- Helper function to check if item has scalable properties
-local function hasScalableProperties(item)
-    -- Check each bonus type using its checkApplicable function
-    if ZItemTiers and ZItemTiers.Bonuses then
-        for bonusType, bonusData in pairs(ZItemTiers.Bonuses) do
-            if bonusData.checkApplicable then
-                local success, isApplicable = pcall(bonusData.checkApplicable, item)
-                if success and isApplicable then
-                    return true
-                end
-            end
-        end
+-- Check if CleanUI is active - if so, skip this hook (CleanUI handles it)
+local hasCleanUI = false
+local successCleanUI = pcall(function()
+    if _G and _G.CleanUI_getItemNameColor then
+        hasCleanUI = true
+        return true
     end
     return false
-end
+end)
 
--- Hook into ISInventoryPane:renderdetails to modify text color based on rarity
--- This works with CleanUI mod by hooking at the right level
--- We override drawText to change text color for item names without affecting icons
-if not ISInventoryPane._zItemTiers_hooked then
+-- Only hook if CleanUI is not active
+if not hasCleanUI and not ISInventoryPane._zItemTiers_hooked then
     ISInventoryPane._zItemTiers_hooked = true
     
     -- Store original renderdetails
@@ -35,21 +27,17 @@ if not ISInventoryPane._zItemTiers_hooked then
             for _, v in ipairs(self.items) do
                 if v and v.item then
                     local item = v.item
-                    if hasScalableProperties(item) then
-                        local modData = item:getModData()
-                        if modData then
-                            local rarity = modData.itemRarity or "Common"
-                            if ZItemTiers and ZItemTiers.Rarities[rarity] then
-                                local rarityData = ZItemTiers.Rarities[rarity]
-                                local color = rarityData.color
-                                
-                                local itemName = item:getName(getSpecificPlayer(self.player))
-                                -- Map both the item name and the item object
-                                itemColorMap[itemName] = {r = color.r, g = color.g, b = color.b}
-                                if v.count > 2 then
-                                    itemColorMap[itemName .. " (" .. (v.count - 1) .. ")"] = {r = color.r, g = color.g, b = color.b}
-                                end
-                            end
+                    -- Check if item has rarity
+                    local rarity = ZItemTiers.GetItemRarity(item)
+                    if rarity and rarity ~= "Common" and ZItemTiers and ZItemTiers.Rarities[rarity] then
+                        local rarityData = ZItemTiers.Rarities[rarity]
+                        local color = rarityData.color
+                        
+                        local itemName = item:getName(getSpecificPlayer(self.player))
+                        -- Map both the item name and the item object
+                        itemColorMap[itemName] = {r = color.r, g = color.g, b = color.b}
+                        if v.count > 2 then
+                            itemColorMap[itemName .. " (" .. (v.count - 1) .. ")"] = {r = color.r, g = color.g, b = color.b}
                         end
                     end
                 end

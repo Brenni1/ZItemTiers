@@ -3,53 +3,35 @@
 
 require "ZItemTiers/core"
 
--- Helper function to check if item has scalable properties
-local function hasScalableProperties(item)
-    -- Check each bonus type using its checkApplicable function
-    if ZItemTiers and ZItemTiers.Bonuses then
-        for bonusType, bonusData in pairs(ZItemTiers.Bonuses) do
-            if bonusData.checkApplicable then
-                local success, isApplicable = pcall(bonusData.checkApplicable, item)
-                if success and isApplicable then
-                    return true
-                end
-            end
-        end
+-- Helper function to check if item has rarity
+local function hasRarity(item)
+    if not item then return false end
+    
+    local modData = item:getModData()
+    if modData and modData.itemRarity then
+        return true
     end
+    
     return false
 end
 
 -- Helper function to add rarity information to a tooltip layout
--- Always shows rarity if item has scalable properties, even if Common
+-- Shows rarity for all items that have been assigned a rarity
 -- This function is exposed to integration modules via ZItemTiers.addRarityToLayout
 local function addRarityToLayout(item, layout)
     if not item or not layout then 
         return 
     end
     
-    -- Check if item could potentially have rarity
-    local hasProps = hasScalableProperties(item)
-    if not hasProps then
-        return
-    end
-    
-    -- Get rarity and bonuses from item modData
-    -- Default to Common if no rarity is set
-    local modData = item:getModData()
-    local rarity = "Common"
-    local itemBonuses = {}
-    
-    if modData then
-        rarity = modData.itemRarity or "Common"
-        itemBonuses = modData.itemBonuses or {}
-    end
+    -- Get rarity and bonuses from item
+    local rarity = ZItemTiers.GetItemRarity(item)
+    local itemBonuses = ZItemTiers.GetItemBonuses(item)
     
     if ZItemTiers and ZItemTiers.Rarities[rarity] then
         local rarityData = ZItemTiers.Rarities[rarity]
         local color = rarityData.color
         
         -- Add rarity row to tooltip (formatted as key:value pair)
-        -- Always show rarity, even if Common
         if layout and layout.addItem then
             local rarityItem = layout:addItem()
             if rarityItem then
@@ -62,12 +44,13 @@ local function addRarityToLayout(item, layout)
             end
         end
         
-        -- Build bonuses text from stored bonuses
+        -- Build bonuses text from fixed bonuses
         local bonusTexts = {}
         for _, bonus in ipairs(itemBonuses) do
             local bonusName = ZItemTiers.GetBonusDisplayName(bonus.type)
-            local bonusPercent = math.floor((bonus.multiplier - 1.0) * 100)
-            table.insert(bonusTexts, "+" .. bonusPercent .. "% " .. bonusName)
+            if bonus.value then
+                table.insert(bonusTexts, "+" .. bonus.value .. "% " .. bonusName)
+            end
         end
         
         -- Add bonuses if we have any
@@ -124,11 +107,10 @@ if not (ZItemTiers and ZItemTiers.BetterClothingInfoActive) then
             originalISToolTipInvRender(self)
             
             -- After the original render is complete, append our rarity info
-            -- Only add if item has scalable properties and we're not in a context menu
+            -- Only add if item has rarity and we're not in a context menu
             if self.item and (not ISContextMenu.instance or not ISContextMenu.instance.visibleCheck) then
-                -- Check if item could potentially have rarity
-                local hasProps = hasScalableProperties(self.item)
-                if hasProps then
+                -- Check if item has rarity
+                if hasRarity(self.item) then
                     -- Get the current tooltip height to know where to append
                     local currentHeight = self.tooltip:getHeight()
                     

@@ -2,8 +2,8 @@ name=Zed's Item Tiers
 id=ZItemTiers
 author=zed_0xff
 url=https://github.com/zed-0xff
-description=Adds a probability-based item rarity system (Common, Uncommon, Rare, Epic, Legendary). ANY item can spawn with ANY rarity based on global probabilities (60% Common, 25% Uncommon, 10% Rare, 4% Epic, 1% Legendary). Higher rarity items spawn less frequently. Starlit Library is optional - install it to see detailed bonus information in tooltips.
+description=Adds a probability-based item rarity system (Common, Uncommon, Rare, Epic, Legendary). ANY item can spawn with ANY rarity based on global probabilities (65% Common, 20% Uncommon, 10% Rare, 4% Epic, 1% Legendary). Higher rarity items have weight reduction and damage bonuses. Java patches are optional - if not compiled, the mod falls back to Lua-only script item cloning for weapons. Starlit Library is optional - install it to see detailed bonus information in tooltips.
 loadModAfter=\CleanUI
 
-//javaJarFile=media/java/client/build/libs/client.jar
-//javaPkgName=me.zed_0xff.itemtiers
+javaJarFile=media/java/client/build/libs/client.jar
+javaPkgName=me.zed_0xff.itemtiers
