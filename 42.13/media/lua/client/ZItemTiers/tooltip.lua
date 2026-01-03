@@ -111,6 +111,7 @@ end
 -- Load integration modules
 require "ZItemTiers/integrations/starlit"
 require "ZItemTiers/integrations/betterclothinginfo"
+require "ZItemTiers/integrations/cleanui"
 
 -- Check if BetterClothingInfo integration was successful
 -- If not, fall back to ISToolTipInv:render hook
