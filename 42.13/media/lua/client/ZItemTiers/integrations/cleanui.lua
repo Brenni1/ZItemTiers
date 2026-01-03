@@ -1,11 +1,18 @@
 -- CleanUI mod integration for inventory item name coloring
 -- Hooks into CleanUI_getItemNameColor() to return rarity colors
+-- Uses ISInventoryItem.renderItemIcon() hook to set item context before getItemNameColor is called
+--
+-- NOTE TO CLEANUI AUTHOR:
+-- It would be much better if CleanUI_getItemNameColor() could accept an item parameter,
+-- e.g. CleanUI_getItemNameColor(item), instead of requiring mods to use workarounds like
+-- hooking into renderItemIcon() to set a global context variable. This would make the
+-- API more reliable and easier to use for modders.
 
 require "ZItemTiers/core"
 
--- Initialize context variable
-if not ZItemTiers._currentRenderingItem then
-    ZItemTiers._currentRenderingItem = nil
+-- Initialize current item variable (set by isUnwanted hook)
+if not ZItemTiers._cleanui_currentItem then
+    ZItemTiers._cleanui_currentItem = nil
 end
 
 -- Check if CleanUI mod is active
@@ -23,17 +30,19 @@ if hasCleanUI and _G and _G.CleanUI_getItemNameColor then
     local originalCleanUI_getItemNameColor = _G.CleanUI_getItemNameColor
     if originalCleanUI_getItemNameColor then
         function _G.CleanUI_getItemNameColor()
-            -- Get the current item from the rendering context
-            local currentItem = ZItemTiers._currentRenderingItem
+            -- Get the current item from context (set by isUnwanted hook)
+            local currentItem = ZItemTiers._cleanui_currentItem
+            
             if currentItem then
                 -- Check if item has rarity
-                local modData = currentItem:getModData()
-                if modData and modData.itemRarity then
-                    local rarity = modData.itemRarity
-                    if ZItemTiers and ZItemTiers.Rarities and ZItemTiers.Rarities[rarity] then
-                        local rarityData = ZItemTiers.Rarities[rarity]
-                        local color = rarityData.color
-                        -- Return rarity color
+                local rarity = ZItemTiers.GetItemRarity(currentItem)
+                
+                if rarity and ZItemTiers and ZItemTiers.Rarities and ZItemTiers.Rarities[rarity] then
+                    local rarityData = ZItemTiers.Rarities[rarity]
+                    local color = rarityData.color
+                    
+                    -- Return rarity color (only if not Common, since Common is white like default)
+                    if rarity ~= "Common" then
                         return {r = color.r, g = color.g, b = color.b}
                     end
                 end
@@ -42,61 +51,53 @@ if hasCleanUI and _G and _G.CleanUI_getItemNameColor then
             -- Fall back to original CleanUI color
             return originalCleanUI_getItemNameColor()
         end
-        print("ZItemTiers: Hooked into CleanUI_getItemNameColor for rarity colors")
     end
     
-    -- Hook into InventoryItem:getName() to set context before CleanUI_getItemNameColor is called
-    -- The vanilla code calls item:getName() in the rendering loop, then CleanUI calls getItemNameColor()
-    -- So if we hook getName() and set context there, CleanUI will see it
-    if not InventoryItem._zItemTiers_cleanui_getName_hooked then
-        InventoryItem._zItemTiers_cleanui_getName_hooked = true
+    -- Hook into ISInventoryItem.renderItemIcon() to set context before getItemNameColor is called
+    -- CleanUI calls renderItemIcon() on line 2589 with the item as a parameter
+    -- This is called before getItemNameColor() on line 2790, so we can set the context here
+    if not ISInventoryItem._zItemTiers_cleanui_renderItemIcon_hooked then
+        ISInventoryItem._zItemTiers_cleanui_renderItemIcon_hooked = true
         
-        local originalGetName = InventoryItem.getName
-        function InventoryItem:getName(player)
-            -- Set this item as the current rendering item
-            -- This will be available when CleanUI calls getItemNameColor()
-            ZItemTiers._currentRenderingItem = self
+        -- Store original renderItemIcon
+        local originalRenderItemIcon = ISInventoryItem.renderItemIcon
+        
+        -- Override renderItemIcon to set context
+        ISInventoryItem.renderItemIcon = function(self, item, x, y, alpha, width, height)
+            -- Set this item as the current item (will be used by getItemNameColor)
+            if item then
+                ZItemTiers._cleanui_currentItem = item
+            end
             
-            -- Call original getName
-            local result = originalGetName(self, player)
-            
-            -- Note: We don't clear _currentRenderingItem here because CleanUI might call
-            -- getItemNameColor() after getName() returns. We'll clear it in renderdetails.
-            
-            return result
+            -- Call original renderItemIcon
+            if originalRenderItemIcon then
+                return originalRenderItemIcon(self, item, x, y, alpha, width, height)
+            end
         end
         
-        print("ZItemTiers: Hooked into InventoryItem.getName for CleanUI integration")
+        print("ZItemTiers: Hooked ISInventoryItem.renderItemIcon for CleanUI integration")
     end
     
-    -- Hook into ISInventoryPane:renderdetails to clear context after rendering
+    -- Hook into ISInventoryPane:renderdetails to clear context
     if not ISInventoryPane._zItemTiers_cleanui_hooked then
         ISInventoryPane._zItemTiers_cleanui_hooked = true
         
-        -- Store the original renderdetails if not already stored by inventory.lua
-        if not ISInventoryPane._zItemTiers_originalRenderDetails then
-            ISInventoryPane._zItemTiers_originalRenderDetails = ISInventoryPane.renderdetails
-        end
+        -- Store the original renderdetails
+        local originalRenderDetails = ISInventoryPane.renderdetails
         
-        local originalRenderDetails = ISInventoryPane._zItemTiers_originalRenderDetails
-        
-        -- Wrap renderdetails to clear context after rendering
+        -- Wrap renderdetails to clear context
         local wrappedRenderDetails = function(self, doDragged)
-            -- Clear context at start of render
-            ZItemTiers._currentRenderingItem = nil
+            -- Clear context at start
+            ZItemTiers._cleanui_currentItem = nil
             
-            -- Call original renderdetails
+            -- Call original renderdetails (isUnwanted() will set context for each item)
             originalRenderDetails(self, doDragged)
             
-            -- Clear context at end of render
-            ZItemTiers._currentRenderingItem = nil
+            -- Clear context at end
+            ZItemTiers._cleanui_currentItem = nil
         end
         
-        -- Only wrap if not already wrapped by inventory.lua
-        if ISInventoryPane.renderdetails == originalRenderDetails then
-            ISInventoryPane.renderdetails = wrappedRenderDetails
-        end
-        
-        print("ZItemTiers: Hooked into ISInventoryPane.renderdetails for CleanUI integration")
+        -- Replace renderdetails with our wrapper
+        ISInventoryPane.renderdetails = wrappedRenderDetails
     end
 end
