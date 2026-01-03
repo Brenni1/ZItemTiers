@@ -17,20 +17,8 @@ ZItemTier.Rare = 3
 ZItemTier.Epic = 4
 ZItemTier.Legendary = 5
 
--- Load bonus definitions
+-- Load bonus definitions (single source of truth)
 require "ZItemTiers/bonuses"
-
--- Bonus types (for backward compatibility and convenience)
-ZItemTiers.BonusTypes = {
-    -- DurabilityBonus = "DurabilityBonus",
-    SpeedBonus = "SpeedBonus",
-    CapacityBonus = "CapacityBonus",
-    ProtectionBonus = "ProtectionBonus",
-    DamageBonus = "DamageBonus",
-    NutritionBonus = "NutritionBonus",
-    FreshnessBonus = "FreshnessBonus",
-    EncumbranceReductionBonus = "EncumbranceReductionBonus",
-}
 
 -- Bonus level multipliers: [Level 1, Level 2, Level 3, Level 4, Level 5]
 ZItemTiers.BonusLevelMultipliers = {
