@@ -54,9 +54,12 @@ local function addRarityToLayout(item, layout)
                 if bonus.type == "RunSpeedModifier" or bonus.type == "VisionImpairmentReduction" then
                     -- These are already formatted with decimal places (e.g., "0.1")
                     bonusText = "+" .. bonus.value .. " " .. bonusName
-                elseif bonus.type == "EncumbranceReduction" or bonus.type == "MaxEncumbranceBonus" or bonus.type == "BiteDefenseBonus" or bonus.type == "ScratchDefenseBonus" then
-                    -- These are flat values, no % sign (e.g., "+5 Bite Defense")
-                    bonusText = "+" .. bonus.value .. " " .. bonusName
+                        elseif bonus.type == "EncumbranceReduction" or bonus.type == "MaxEncumbranceBonus" or bonus.type == "BiteDefenseBonus" or bonus.type == "ScratchDefenseBonus" then
+                            -- These are flat values, no % sign (e.g., "+5 Bite Defense")
+                            bonusText = "+" .. bonus.value .. " " .. bonusName
+                        elseif bonus.type == "MoodBonus" then
+                            -- Percentage bonus (e.g., "+10% Mood Benefits")
+                            bonusText = "+" .. bonus.value .. "% " .. bonusName
                 else
                     -- Percentage bonuses (e.g., "+20% Damage")
                     bonusText = "+" .. bonus.value .. "% " .. bonusName
@@ -109,6 +112,7 @@ end
 require "ZItemTiers/integrations/starlit"
 require "ZItemTiers/integrations/betterclothinginfo"
 require "ZItemTiers/integrations/cleanui"
+require "ZItemTiers/integrations/contextmenu"
 
 -- Check if BetterClothingInfo integration was successful
 -- If not, fall back to ISToolTipInv:render hook

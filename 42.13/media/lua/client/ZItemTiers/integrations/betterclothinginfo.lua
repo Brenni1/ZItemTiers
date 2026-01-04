@@ -80,18 +80,22 @@ if hasBetterClothingInfo and _G and _G.DoTooltipClothing and DrawItem and SetIte
             -- Store the current item for SetItemInfoAsText to access
             ZItemTiers._currentItemForTooltip = item
             
+            -- Get rarity and bonuses once
+            local rarity = ZItemTiers.GetItemRarity(item)
+            local itemBonuses = ZItemTiers.GetItemBonuses(item)
+            local rarityData = nil
+            local rarityName = nil
+            
+            if rarity and ZItemTiers.Rarities and ZItemTiers.Rarities[rarity] then
+                rarityData = ZItemTiers.Rarities[rarity]
+                rarityName = rarityData.name
+            end
+            
             -- Call the original BetterClothingInfo function first
             originalDoTooltipClothing(objTooltip, item, layoutTooltip)
             
             -- Add our rarity info using the same DrawItem pattern as BetterClothingInfo
-            if ZItemTiers and item and layoutTooltip and DrawItem then
-                -- Check if item has rarity
-                local rarity = ZItemTiers.GetItemRarity(item)
-                local itemBonuses = ZItemTiers.GetItemBonuses(item)
-                
-                if rarity and ZItemTiers.Rarities and ZItemTiers.Rarities[rarity] then
-                    local rarityData = ZItemTiers.Rarities[rarity]
-                    local rarityName = rarityData.name
+            if ZItemTiers and item and layoutTooltip and DrawItem and rarityData and rarityName then
                     
                     -- Create DrawItem for rarity using the same pattern as BetterClothingInfo
                     -- Include rarity in the item value to ensure items with different rarities are treated as different items
@@ -127,6 +131,9 @@ if hasBetterClothingInfo and _G and _G.DoTooltipClothing and DrawItem and SetIte
                             elseif bonus.type == "EncumbranceReduction" or bonus.type == "MaxEncumbranceBonus" or bonus.type == "BiteDefenseBonus" or bonus.type == "ScratchDefenseBonus" then
                                 -- These are flat values, no % sign (e.g., "+5 Bite Defense")
                                 bonusText = "+" .. bonus.value .. " " .. bonusName
+                            elseif bonus.type == "MoodBonus" then
+                                -- Percentage bonus (e.g., "+10% Mood Benefits")
+                                bonusText = "+" .. bonus.value .. "% " .. bonusName
                             else
                                 -- Percentage bonuses (e.g., "+20% Damage")
                                 bonusText = "+" .. bonus.value .. "% " .. bonusName
@@ -151,7 +158,6 @@ if hasBetterClothingInfo and _G and _G.DoTooltipClothing and DrawItem and SetIte
                             end
                         end
                     end
-                end
             end
             -- Clear the current item after the tooltip is done
             ZItemTiers._currentItemForTooltip = nil

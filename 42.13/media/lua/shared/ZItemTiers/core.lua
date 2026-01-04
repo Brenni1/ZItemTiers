@@ -89,6 +89,7 @@ ZItemTiers.RarityBonuses = {
         maxEncumbranceBonus = 0.1,  -- +0.1 maximum item encumbrance (for InventoryContainer)
         drainableCapacityBonus = 10,  -- +10% capacity (for Drainable items)
         visionImpairmentReduction = 0.05,  -- -0.05 vision impairment (for Clothing with vision impairment)
+        moodBonus = 0.1,  -- +10% mood benefits (boredom/unhappiness/stress reduction) for Literature items
     },
     Rare = {
         weightReduction = 20,  -- 20% weight reduction (for item's own weight)
@@ -101,6 +102,7 @@ ZItemTiers.RarityBonuses = {
         maxEncumbranceBonus = 0.2,  -- +0.2 maximum item encumbrance (for InventoryContainer)
         drainableCapacityBonus = 20,  -- +20% capacity (for Drainable items)
         visionImpairmentReduction = 0.10,  -- -0.10 vision impairment (for Clothing with vision impairment)
+        moodBonus = 0.2,  -- +20% mood benefits (boredom/unhappiness/stress reduction) for Literature items
     },
     Epic = {
         weightReduction = 30,  -- 30% weight reduction (for item's own weight)
@@ -113,6 +115,7 @@ ZItemTiers.RarityBonuses = {
         maxEncumbranceBonus = 0.3,  -- +0.3 maximum item encumbrance (for InventoryContainer)
         drainableCapacityBonus = 30,  -- +30% capacity (for Drainable items)
         visionImpairmentReduction = 0.15,  -- -0.15 vision impairment (for Clothing with vision impairment)
+        moodBonus = 0.3,  -- +30% mood benefits (boredom/unhappiness/stress reduction) for Literature items
     },
     Legendary = {
         weightReduction = 50,  -- 50% weight reduction (for item's own weight)
@@ -125,6 +128,7 @@ ZItemTiers.RarityBonuses = {
         maxEncumbranceBonus = 0.5, -- +0.5 maximum item encumbrance (for InventoryContainer)
         drainableCapacityBonus = 50,  -- +50% capacity (for Drainable items)
         visionImpairmentReduction = 0.25,  -- -0.25 vision impairment (for Clothing with vision impairment)
+        moodBonus = 0.5,  -- +50% mood benefits (boredom/unhappiness/stress reduction) for Literature items
     },
 }
 
@@ -1031,6 +1035,115 @@ function ZItemTiers.ApplyRarityBonuses(item, rarity)
         end
     end
     
+    -- Apply mood bonus (for Literature items - increases boredom/unhappiness/stress reduction)
+    if bonuses.moodBonus then
+        local isLiterature = false
+        local successLiterature, resultLiterature = pcall(function()
+            return instanceof(item, "Literature")
+        end)
+        if successLiterature and resultLiterature then
+            isLiterature = true
+        end
+        
+        if isLiterature then
+            -- Get base mood values from script item
+            local baseBoredomChange = 0.0
+            local baseUnhappyChange = 0.0
+            local baseStressChange = 0.0
+            
+            local successGetBase, scriptItem = pcall(function()
+                if item.getScriptItem then
+                    return item:getScriptItem()
+                end
+                return nil
+            end)
+            
+            if successGetBase and scriptItem then
+                -- Try to get from script item properties
+                if scriptItem.boredomChange then
+                    baseBoredomChange = scriptItem.boredomChange
+                end
+                if scriptItem.unhappyChange then
+                    baseUnhappyChange = scriptItem.unhappyChange
+                end
+                if scriptItem.stressChange then
+                    baseStressChange = scriptItem.stressChange
+                end
+            end
+            
+            -- Also try instance methods as fallback
+            local successGetBoredom, currentBoredom = pcall(function()
+                if item.getBoredomChange then
+                    return item:getBoredomChange()
+                end
+                return baseBoredomChange
+            end)
+            if successGetBoredom and currentBoredom ~= 0.0 then
+                baseBoredomChange = currentBoredom
+            end
+            
+            local successGetUnhappy, currentUnhappy = pcall(function()
+                if item.getUnhappyChange then
+                    return item:getUnhappyChange()
+                end
+                return baseUnhappyChange
+            end)
+            if successGetUnhappy and currentUnhappy ~= 0.0 then
+                baseUnhappyChange = currentUnhappy
+            end
+            
+            local successGetStress, currentStress = pcall(function()
+                if item.getStressChange then
+                    return item:getStressChange()
+                end
+                return baseStressChange
+            end)
+            if successGetStress and currentStress ~= 0.0 then
+                baseStressChange = currentStress
+            end
+            
+            -- Apply mood bonus multiplier (1 + bonus) to negative values (mood reduction)
+            -- Negative values are good (reduce boredom/unhappiness/stress), so we make them more negative
+            local moodMultiplier = 1.0 + bonuses.moodBonus
+            
+            if baseBoredomChange < 0.0 then
+                local newBoredomChange = baseBoredomChange * moodMultiplier
+                local successSet = pcall(function()
+                    if item.setBoredomChange then
+                        item:setBoredomChange(newBoredomChange)
+                    end
+                end)
+                if successSet then
+                    print("ZItemTiers: Applied mood bonus to boredom: " .. tostring(item:getFullType()) .. " (base: " .. baseBoredomChange .. ", new: " .. newBoredomChange .. ")")
+                end
+            end
+            
+            if baseUnhappyChange < 0.0 then
+                local newUnhappyChange = baseUnhappyChange * moodMultiplier
+                local successSet = pcall(function()
+                    if item.setUnhappyChange then
+                        item:setUnhappyChange(newUnhappyChange)
+                    end
+                end)
+                if successSet then
+                    print("ZItemTiers: Applied mood bonus to unhappiness: " .. tostring(item:getFullType()) .. " (base: " .. baseUnhappyChange .. ", new: " .. newUnhappyChange .. ")")
+                end
+            end
+            
+            if baseStressChange < 0.0 then
+                local newStressChange = baseStressChange * moodMultiplier
+                local successSet = pcall(function()
+                    if item.setStressChange then
+                        item:setStressChange(newStressChange)
+                    end
+                end)
+                if successSet then
+                    print("ZItemTiers: Applied mood bonus to stress: " .. tostring(item:getFullType()) .. " (base: " .. baseStressChange .. ", new: " .. newStressChange .. ")")
+                end
+            end
+        end
+    end
+    
     -- Mark bonuses as applied to prevent multiple applications
     -- Use the global session ID initialized once per game session
     if modData then
@@ -1304,6 +1417,53 @@ function ZItemTiers.GetItemBonuses(item)
         })
     end
     
+    -- Check if this is a Literature item to show mood bonus
+    local isLiterature = false
+    local successLiterature, resultLiterature = pcall(function()
+        return instanceof(item, "Literature")
+    end)
+    if successLiterature and resultLiterature then
+        isLiterature = true
+    end
+    
+    if bonuses.moodBonus and isLiterature then
+        -- Check if item has any mood effects (boredom/unhappiness/stress reduction)
+        local hasMoodEffects = false
+        local successGetBoredom, boredomChange = pcall(function()
+            if item.getBoredomChange then
+                return item:getBoredomChange()
+            end
+            return 0.0
+        end)
+        local successGetUnhappy, unhappyChange = pcall(function()
+            if item.getUnhappyChange then
+                return item:getUnhappyChange()
+            end
+            return 0.0
+        end)
+        local successGetStress, stressChange = pcall(function()
+            if item.getStressChange then
+                return item:getStressChange()
+            end
+            return 0.0
+        end)
+        
+        if (successGetBoredom and boredomChange < 0.0) or
+           (successGetUnhappy and unhappyChange < 0.0) or
+           (successGetStress and stressChange < 0.0) then
+            hasMoodEffects = true
+        end
+        
+        if hasMoodEffects then
+            local moodPercent = string.format("%.0f", bonuses.moodBonus * 100)
+            table.insert(bonusList, {
+                type = "MoodBonus",
+                value = moodPercent,
+                displayName = "Mood Benefits"
+            })
+        end
+    end
+    
     return bonusList
 end
 
@@ -1318,8 +1478,9 @@ function ZItemTiers.GetBonusDisplayName(bonusType)
         BiteDefenseBonus = "Bite Defense",
         ScratchDefenseBonus = "Scratch Defense",
         CapacityBonus = "Capacity",
-    DrainableCapacityBonus = "Liquid Capacity",
+        DrainableCapacityBonus = "Liquid Capacity",
     VisionImpairmentReduction = "Vision Impairment Reduction",
+    MoodBonus = "Mood Benefits",
 }
     return displayNames[bonusType] or bonusType
 end
