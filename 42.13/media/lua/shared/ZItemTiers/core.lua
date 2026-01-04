@@ -4,6 +4,11 @@
 
 ZItemTiers = ZItemTiers or {}
 
+-- Initialize global session ID for bonus tracking (initialized once per game session)
+if not ZItemTiers._bonusesAppliedSessionId then
+    ZItemTiers._bonusesAppliedSessionId = ZombRand(1000000)
+end
+
 -- Blacklist of items that should never have rarity assigned
 -- Items in this list will never receive rarity bonuses
 ZItemTiers.BlacklistedItems = {
@@ -17,6 +22,8 @@ ZItemTiers.BlacklistedItems = {
     ["Base.CarKey"] = true,
     ["Base.Brochure"] = true,
     ["Base.Flier"] = true,
+    -- Maps (maps are informational items, no benefit from rarity)
+    ["Base.Map"] = true,
 }
 
 -- Rarity probabilities: [Common, Uncommon, Rare, Epic, Legendary]
@@ -80,6 +87,7 @@ ZItemTiers.RarityBonuses = {
         scratchDefenseBonus = 5,  -- +5 scratch defense (for Clothing)
         capacityBonus = 10,  -- +10% capacity (for InventoryContainer)
         maxEncumbranceBonus = 0.1,  -- +0.1 maximum item encumbrance (for InventoryContainer)
+        drainableCapacityBonus = 10,  -- +10% capacity (for Drainable items)
     },
     Rare = {
         weightReduction = 20,  -- 20% weight reduction (for item's own weight)
@@ -90,6 +98,7 @@ ZItemTiers.RarityBonuses = {
         scratchDefenseBonus = 10,  -- +10 scratch defense (for Clothing)
         capacityBonus = 20,  -- +20% capacity (for InventoryContainer)
         maxEncumbranceBonus = 0.2,  -- +0.2 maximum item encumbrance (for InventoryContainer)
+        drainableCapacityBonus = 20,  -- +20% capacity (for Drainable items)
     },
     Epic = {
         weightReduction = 30,  -- 30% weight reduction (for item's own weight)
@@ -100,6 +109,7 @@ ZItemTiers.RarityBonuses = {
         scratchDefenseBonus = 15,  -- +15 scratch defense (for Clothing)
         capacityBonus = 30,  -- +30% capacity (for InventoryContainer)
         maxEncumbranceBonus = 0.3,  -- +0.3 maximum item encumbrance (for InventoryContainer)
+        drainableCapacityBonus = 30,  -- +30% capacity (for Drainable items)
     },
     Legendary = {
         weightReduction = 50,  -- 50% weight reduction (for item's own weight)
@@ -110,6 +120,7 @@ ZItemTiers.RarityBonuses = {
         scratchDefenseBonus = 20,  -- +20 scratch defense (for Clothing)
         capacityBonus = 50, -- +50% capacity (for InventoryContainer)
         maxEncumbranceBonus = 0.5, -- +0.5 maximum item encumbrance (for InventoryContainer)
+        drainableCapacityBonus = 50,  -- +50% capacity (for Drainable items)
     },
 }
 
@@ -147,6 +158,30 @@ function ZItemTiers.IsItemBlacklisted(item)
         return true
     end
     
+    -- Check if item is a Map type (all maps should be blacklisted)
+    local successItemType, itemType = pcall(function()
+        if item.getType then
+            return item:getType()
+        end
+        return nil
+    end)
+    if successItemType and itemType then
+        -- Check if it's ItemType.MAP
+        local successCheck, isMap = pcall(function()
+            if ItemType and ItemType.MAP then
+                return itemType == ItemType.MAP
+            end
+            -- Fallback: check by string name
+            if itemType and itemType.toString then
+                return itemType:toString() == "Map"
+            end
+            return false
+        end)
+        if successCheck and isMap then
+            return true
+        end
+    end
+    
     return false
 end
 
@@ -154,59 +189,117 @@ end
 function ZItemTiers.ApplyRarityBonuses(item, rarity)
     if not item then return end
     
+    local itemType = item:getFullType()
+    
+    -- Debug logging for gas cans
+    if itemType and (string.find(itemType, "PetrolCan") or string.find(itemType, "GasCan")) then
+        print("ZItemTiers: [DEBUG] ApplyRarityBonuses called for " .. itemType .. " with rarity " .. tostring(rarity))
+    end
+    
     local rarityData = ZItemTiers.Rarities[rarity]
-    if not rarityData then return end
+    if not rarityData then 
+        if itemType and (string.find(itemType, "PetrolCan") or string.find(itemType, "GasCan")) then
+            print("ZItemTiers: [DEBUG] No rarity data for " .. itemType .. " rarity " .. tostring(rarity))
+        end
+        return 
+    end
     
     local bonuses = ZItemTiers.RarityBonuses[rarity]
-    if not bonuses then return end
+    if not bonuses then 
+        if itemType and (string.find(itemType, "PetrolCan") or string.find(itemType, "GasCan")) then
+            print("ZItemTiers: [DEBUG] No bonuses for " .. itemType .. " rarity " .. tostring(rarity))
+        end
+        return 
+    end
     
-        -- Store rarity in modData
-        local modData = item:getModData()
-        if modData then
-            modData.itemRarity = rarity
-            -- Store the target weight reduction percentage so we can re-apply it if weight gets reset
-            if bonuses.weightReduction then
-                modData.itemWeightReduction = bonuses.weightReduction
+    -- Get modData first to check if bonuses have already been applied
+    local modData = item:getModData()
+    if not modData then 
+        if itemType and (string.find(itemType, "PetrolCan") or string.find(itemType, "GasCan")) then
+            print("ZItemTiers: [DEBUG] No modData for " .. itemType)
+        end
+        return 
+    end
+    
+    -- Check if this exact rarity and bonuses have already been applied in this game session
+    -- Compare with global session ID to ensure bonuses were applied in the current session
+    if modData.itemRarity == rarity and modData._bonusesApplied == ZItemTiers._bonusesAppliedSessionId then
+        -- Bonuses already applied for this rarity in this session, skip
+        if itemType and (string.find(itemType, "PetrolCan") or string.find(itemType, "GasCan")) then
+            print("ZItemTiers: [DEBUG] Bonuses already applied for " .. itemType .. " (rarity: " .. tostring(rarity) .. ", session: " .. tostring(modData._bonusesApplied) .. ")")
+        end
+        return
+    end
+    
+    -- If session ID doesn't match, reset base capacity values to force recalculation
+    -- This prevents using incorrect base values from previous sessions
+    -- Only reset for drainable items to avoid unnecessary messages
+    if modData._bonusesApplied and modData._bonusesApplied ~= ZItemTiers._bonusesAppliedSessionId then
+        -- Check if this is a drainable item before resetting
+        local isDrainable = false
+        local successDrainable, resultDrainable = pcall(function()
+            if item.getFluidContainer then
+                local fluidContainer = item:getFluidContainer()
+                return fluidContainer ~= nil
             end
-            -- Store encumbrance reduction bonus so we can re-apply it if it gets reset
-            if bonuses.encumbranceReduction then
-                modData.itemEncumbranceReduction = bonuses.encumbranceReduction
-            end
-            -- Store the run speed modifier bonus and base value so we can re-apply it if it gets reset
-            if bonuses.runSpeedModifier then
-                modData.itemRunSpeedModifierBonus = bonuses.runSpeedModifier
-                -- Also store the base value for verification
-                local successGetBase, baseValue = pcall(function()
-                    if item.getScriptItem then
-                        local scriptItem = item:getScriptItem()
-                        if scriptItem and scriptItem.runSpeedModifier then
-                            return scriptItem.runSpeedModifier
-                        end
-                    end
-                    return 1.0
-                end)
-                if successGetBase and baseValue then
-                    modData.itemRunSpeedModifierBase = baseValue
-                else
-                    modData.itemRunSpeedModifierBase = 1.0
+            return false
+        end)
+        if successDrainable and resultDrainable then
+            isDrainable = true
+            modData.itemDrainableCapacityBase = nil
+            print("ZItemTiers: Session ID changed, resetting base capacity for drainable item: " .. tostring(item:getFullType()))
+        end
+    end
+    
+    -- Store rarity in modData
+    modData.itemRarity = rarity
+    
+    -- Store the target weight reduction percentage so we can re-apply it if weight gets reset
+    if bonuses.weightReduction then
+        modData.itemWeightReduction = bonuses.weightReduction
+    end
+    -- Store encumbrance reduction bonus so we can re-apply it if it gets reset
+    if bonuses.encumbranceReduction then
+        modData.itemEncumbranceReduction = bonuses.encumbranceReduction
+    end
+    -- Store the run speed modifier bonus and base value so we can re-apply it if it gets reset
+    if bonuses.runSpeedModifier then
+        modData.itemRunSpeedModifierBonus = bonuses.runSpeedModifier
+        -- Also store the base value for verification
+        local successGetBase, baseValue = pcall(function()
+            if item.getScriptItem then
+                local scriptItem = item:getScriptItem()
+                if scriptItem and scriptItem.runSpeedModifier then
+                    return scriptItem.runSpeedModifier
                 end
             end
-            -- Store capacity bonus so we can re-apply it if it gets reset
-            if bonuses.capacityBonus then
-                modData.itemCapacityBonus = bonuses.capacityBonus
-            end
-            -- Store max encumbrance bonus so we can re-apply it if it gets reset
-            if bonuses.maxEncumbranceBonus then
-                modData.itemMaxEncumbranceBonus = bonuses.maxEncumbranceBonus
-            end
-            -- Store defense bonuses so we can re-apply them if they get reset
-            if bonuses.biteDefenseBonus then
-                modData.itemBiteDefenseBonus = bonuses.biteDefenseBonus
-            end
-            if bonuses.scratchDefenseBonus then
-                modData.itemScratchDefenseBonus = bonuses.scratchDefenseBonus
-            end
+            return 1.0
+        end)
+        if successGetBase and baseValue then
+            modData.itemRunSpeedModifierBase = baseValue
+        else
+            modData.itemRunSpeedModifierBase = 1.0
         end
+    end
+    -- Store capacity bonus so we can re-apply it if it gets reset
+    if bonuses.capacityBonus then
+        modData.itemCapacityBonus = bonuses.capacityBonus
+    end
+    -- Store max encumbrance bonus so we can re-apply it if it gets reset
+    if bonuses.maxEncumbranceBonus then
+        modData.itemMaxEncumbranceBonus = bonuses.maxEncumbranceBonus
+    end
+    -- Store defense bonuses so we can re-apply them if they get reset
+    if bonuses.biteDefenseBonus then
+        modData.itemBiteDefenseBonus = bonuses.biteDefenseBonus
+    end
+    if bonuses.scratchDefenseBonus then
+        modData.itemScratchDefenseBonus = bonuses.scratchDefenseBonus
+    end
+    -- Store drainable capacity bonus so we can re-apply it if it gets reset
+    if bonuses.drainableCapacityBonus then
+        modData.itemDrainableCapacityBonus = bonuses.drainableCapacityBonus
+    end
     
     -- Special handling for HandWeapon items
     local isHandWeapon = false
@@ -692,6 +785,166 @@ function ZItemTiers.ApplyRarityBonuses(item, rarity)
         end
     end
     
+    -- Apply drainable capacity bonus (for Drainable items - liquid containers)
+    if bonuses.drainableCapacityBonus then
+        local itemType = item:getFullType()
+        local isDrainable = false
+        local successDrainable, resultDrainable = pcall(function()
+            if item.getFluidContainer then
+                local fluidContainer = item:getFluidContainer()
+                return fluidContainer ~= nil
+            end
+            return false
+        end)
+        if successDrainable and resultDrainable then
+            isDrainable = true
+        end
+        
+        -- Debug logging for drainable items (especially gas cans)
+        if itemType and (string.find(itemType, "PetrolCan") or string.find(itemType, "GasCan") or string.find(itemType, "WaterBottle") or string.find(itemType, "Bottle")) then
+            print("ZItemTiers: [DEBUG] Checking drainable item: " .. itemType .. ", isDrainable=" .. tostring(isDrainable) .. ", rarity=" .. tostring(rarity) .. ", bonus=" .. tostring(bonuses.drainableCapacityBonus))
+        end
+        
+        if isDrainable then
+            -- Check if bonus has already been applied (prevent multiple applications)
+            local currentCapacity = 0
+            local successGetCurrent, currentValue = pcall(function()
+                if item.getFluidContainer then
+                    local fluidContainer = item:getFluidContainer()
+                    if fluidContainer and fluidContainer.getCapacity then
+                        return fluidContainer:getCapacity()
+                    end
+                end
+                return 0
+            end)
+            if successGetCurrent and currentValue then
+                currentCapacity = currentValue
+            end
+            
+            -- Get base capacity - use stored value if available, otherwise get from script item
+            local baseCapacity = 0
+            -- Check if stored base capacity is valid (must match current session ID)
+            local storedBaseIsValid = false
+            if modData and modData.itemDrainableCapacityBase and modData.itemDrainableCapacityBase > 0 then
+                -- Only use stored base if it was set in the current session
+                if modData._bonusesApplied == ZItemTiers._bonusesAppliedSessionId then
+                    storedBaseIsValid = true
+                    baseCapacity = modData.itemDrainableCapacityBase
+                    print("ZItemTiers: Using stored base capacity " .. baseCapacity .. " for " .. tostring(item:getFullType()) .. " (session matches)")
+                else
+                    -- Stored base is from a different session, invalidate it
+                    modData.itemDrainableCapacityBase = nil
+                    print("ZItemTiers: Invalidated stored base capacity for " .. tostring(item:getFullType()) .. " (session mismatch)")
+                end
+            end
+            
+            if not storedBaseIsValid then
+                -- Try to get base capacity from script item template (before any modifications)
+                local successGetScriptBase, scriptBaseValue = pcall(function()
+                    -- First, try to create a fresh instance to get base capacity
+                    -- This is the most reliable way to get the original capacity
+                    local successCreate, freshItem = pcall(function()
+                        local itemType = item:getFullType()
+                        if itemType then
+                            return instanceItem(itemType)
+                        end
+                        return nil
+                    end)
+                    if successCreate and freshItem then
+                        local successGetFresh, freshCapacity = pcall(function()
+                            if freshItem.getFluidContainer then
+                                local freshFluidContainer = freshItem:getFluidContainer()
+                                if freshFluidContainer and freshFluidContainer.getCapacity then
+                                    return freshFluidContainer:getCapacity()
+                                end
+                            end
+                            return nil
+                        end)
+                        if successGetFresh and freshCapacity and freshCapacity > 0 then
+                            return freshCapacity
+                        end
+                    end
+                    
+                    -- Fallback: try to get from script item
+                    if item.getScriptItem then
+                        local scriptItem = item:getScriptItem()
+                        if scriptItem then
+                            -- For drainable items, try to get maxCapacity from script item
+                            if scriptItem.getMaxCapacity then
+                                local maxCap = scriptItem:getMaxCapacity()
+                                if maxCap and maxCap > 0 then
+                                    return maxCap
+                                end
+                            end
+                            -- Fallback: try maxCapacity property directly
+                            if scriptItem.maxCapacity then
+                                return scriptItem.maxCapacity
+                            end
+                        end
+                    end
+                    return nil
+                end)
+                
+                if successGetScriptBase and scriptBaseValue and scriptBaseValue > 0 then
+                    baseCapacity = scriptBaseValue
+                    print("ZItemTiers: Got base capacity " .. baseCapacity .. " from fresh instance/script item for " .. tostring(item:getFullType()) .. " (current: " .. currentCapacity .. ")")
+                elseif currentCapacity > 0 then
+                    -- No bonus stored yet, assume current is base (first time application)
+                    -- This should only happen on the very first application before any modifications
+                    -- WARNING: This might be wrong if the item was already modified
+                    baseCapacity = currentCapacity
+                    print("ZItemTiers: WARNING: Using current capacity " .. currentCapacity .. " as base (first application) for " .. tostring(item:getFullType()) .. " - this might be incorrect if item was already modified!")
+                else
+                    print("ZItemTiers: ERROR: Could not determine base capacity for " .. tostring(item:getFullType()) .. " (current: " .. currentCapacity .. ")")
+                end
+                
+                -- Store the base capacity in modData for future use
+                if modData and baseCapacity > 0 then
+                    modData.itemDrainableCapacityBase = baseCapacity
+                end
+            end
+            
+            -- Only apply if we have a valid base capacity
+            if baseCapacity > 0 then
+                -- Calculate expected capacity: base * (1 + bonus percentage / 100)
+                local capacityMultiplier = 1.0 + (bonuses.drainableCapacityBonus / 100.0)
+                local expectedCapacity = baseCapacity * capacityMultiplier
+                
+                -- Check if bonus has already been applied (within small tolerance for floating point)
+                if math.abs(currentCapacity - expectedCapacity) < 0.01 then
+                    -- Already applied, skip this bonus (but continue with other bonuses)
+                    print("ZItemTiers: [DEBUG] Drainable capacity bonus already applied for " .. tostring(item:getFullType()) .. " (current: " .. currentCapacity .. ", expected: " .. expectedCapacity .. ")")
+                else
+                    -- Debug logging before applying
+                    print("ZItemTiers: [DEBUG] Applying drainable capacity bonus to " .. tostring(item:getFullType()) .. " (current: " .. currentCapacity .. ", base: " .. baseCapacity .. ", expected: " .. expectedCapacity .. ")")
+                    
+                    local successSet = pcall(function()
+                        if item.getFluidContainer then
+                            local fluidContainer = item:getFluidContainer()
+                            if fluidContainer and fluidContainer.setCapacity then
+                                fluidContainer:setCapacity(expectedCapacity)
+                                print("ZItemTiers: Applied drainable capacity bonus +" .. bonuses.drainableCapacityBonus .. "% to drainable: " .. tostring(item:getFullType()) .. " (base: " .. baseCapacity .. ", new: " .. expectedCapacity .. ")")
+                            end
+                        end
+                    end)
+                end
+            else
+                -- Debug logging when base capacity is 0
+                if itemType and (string.find(itemType, "PetrolCan") or string.find(itemType, "GasCan")) then
+                    print("ZItemTiers: [DEBUG] ERROR: baseCapacity is 0 for " .. itemType .. " (current: " .. currentCapacity .. ")")
+                end
+            end
+        end
+    end
+    
+    -- Mark bonuses as applied to prevent multiple applications
+    -- Use the global session ID initialized once per game session
+    if modData then
+        if not modData._bonusesApplied then
+            modData._bonusesApplied = ZItemTiers._bonusesAppliedSessionId
+        end
+    end
+    
     -- Future bonuses can be added here following the same pattern
 end
 
@@ -896,9 +1149,30 @@ function ZItemTiers.GetItemBonuses(item)
                 })
             end
         end
-    
-    return bonusList
-end
+        
+        -- Check if this is a Drainable item to show drainable capacity bonus
+        local isDrainable = false
+        local successDrainable, resultDrainable = pcall(function()
+            if item.getFluidContainer then
+                local fluidContainer = item:getFluidContainer()
+                return fluidContainer ~= nil
+            end
+            return false
+        end)
+        if successDrainable and resultDrainable then
+            isDrainable = true
+        end
+        
+        if bonuses.drainableCapacityBonus and isDrainable then
+            table.insert(bonusList, {
+                type = "DrainableCapacityBonus",
+                value = bonuses.drainableCapacityBonus,
+                displayName = "Liquid Capacity"
+            })
+        end
+        
+        return bonusList
+    end
 
 -- Get bonus display name
 function ZItemTiers.GetBonusDisplayName(bonusType)
@@ -911,6 +1185,7 @@ function ZItemTiers.GetBonusDisplayName(bonusType)
         BiteDefenseBonus = "Bite Defense",
         ScratchDefenseBonus = "Scratch Defense",
         CapacityBonus = "Capacity",
+        DrainableCapacityBonus = "Liquid Capacity",
     }
     return displayNames[bonusType] or bonusType
 end

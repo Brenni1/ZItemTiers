@@ -10,14 +10,36 @@ ZItemTiers = ZItemTiers or {}
 
 -- Calculate output rarity based on ingredient rarities (Factorio-style)
 -- Returns the calculated rarity name
+-- Parameters:
+--   ingredientItems: ArrayList of ingredient items
+--   character: (optional) IsoGameCharacter performing the craft
+--   recipe: (optional) CraftRecipe being performed
 -- Rules:
 -- 1. If all ingredients are Epic, output is at least Epic
 -- 2. If ingredients have different rarities, output rarity is based on their ratio/probability
 -- 3. Output is always at least the minimum (highest tier) rarity among ingredients
-function ZItemTiers.CalculateCraftingRarity(ingredientItems)
+-- 4. Skill level affects the result:
+--    - Level 0: 50% chance to be 1 tier lower
+--    - Level 1: Keep calculated tier (no change)
+--    - Level > 1: Small chance (5% per level above 1) to be 1 tier higher
+function ZItemTiers.CalculateCraftingRarity(ingredientItems, character, recipe)
     if not ingredientItems or ingredientItems:size() == 0 then
         -- No ingredients, use normal spawn probability
         return ZItemTiers.RollRarity()
+    end
+    
+    -- Get crafting skill level
+    local skillLevel = 0
+    if character and recipe then
+        local success, level = pcall(function()
+            if recipe.getHighestRelevantSkillLevel then
+                return recipe:getHighestRelevantSkillLevel(character)
+            end
+            return 0
+        end)
+        if success and level then
+            skillLevel = level
+        end
     end
     
     -- Collect rarities from all ingredients
@@ -71,6 +93,30 @@ function ZItemTiers.CalculateCraftingRarity(ingredientItems)
     
     -- Ensure output is at least the minimum rarity tier (Factorio rule: all Epic -> at least Epic)
     targetIndex = math.max(minRarityIndex, targetIndex)
+    
+    -- Apply skill level modifiers
+    if skillLevel == 0 then
+        -- Skill level 0: 50% chance to be 1 tier lower
+        local roll = ZombRand(10000) / 10000.0  -- Random 0.0 to 1.0
+        if roll < 0.5 then
+            -- Reduce by 1 tier (but not below Common/1)
+            targetIndex = math.max(1, targetIndex - 1)
+            print("ZItemTiers: [Crafting] Skill level 0 reduced tier from " .. (targetIndex + 1) .. " to " .. targetIndex)
+        end
+    elseif skillLevel > 1 then
+        -- Skill level > 1: Small chance to be 1 tier higher
+        -- Chance = 5% per level above 1 (so level 2 = 5%, level 3 = 10%, etc.)
+        local upgradeChance = (skillLevel - 1) * 0.05
+        local roll = ZombRand(10000) / 10000.0  -- Random 0.0 to 1.0
+        
+        if roll < upgradeChance then
+            -- Upgrade by 1 tier (up to Legendary/5)
+            local oldIndex = targetIndex
+            targetIndex = math.min(5, targetIndex + 1)
+            print("ZItemTiers: [Crafting] Skill level " .. skillLevel .. " upgraded tier from " .. oldIndex .. " to " .. targetIndex)
+        end
+    end
+    -- Skill level 1: No change (keep calculated tier)
     
     -- Clamp to valid rarity range (1-5)
     targetIndex = math.max(1, math.min(5, targetIndex))
@@ -137,7 +183,7 @@ RecipeManager.PerformMakeItem = function(recipe, item, character, containers)
     -- Calculate output rarity BEFORE performing recipe (so we can store it in crafting state)
     local outputRarity = nil
     if successGet and sourceItems and sourceItems:size() > 0 then
-        outputRarity = ZItemTiers.CalculateCraftingRarity(sourceItems)
+        outputRarity = ZItemTiers.CalculateCraftingRarity(sourceItems, character, recipe)
         
         -- Debug: log source items and their rarities
         local debugMsg = "ZItemTiers: [PerformMakeItem] Crafting with " .. sourceItems:size() .. " ingredients: "
@@ -254,7 +300,21 @@ if ISHandcraftAction and ISHandcraftAction.performRecipe then
         
         -- Calculate output rarity BEFORE performing recipe
         if characterId and consumedItems and consumedItems:size() > 0 then
-            local outputRarity = ZItemTiers.CalculateCraftingRarity(consumedItems)
+            -- Get recipe from logic for skill level calculation
+            local recipe = nil
+            if self.logic then
+                local successGetRecipe, recipeData = pcall(function()
+                    if self.logic and self.logic.getRecipeData then
+                        return self.logic:getRecipeData()
+                    end
+                    return nil
+                end)
+                if successGetRecipe and recipeData and recipeData.getRecipe then
+                    recipe = recipeData:getRecipe()
+                end
+            end
+            
+            local outputRarity = ZItemTiers.CalculateCraftingRarity(consumedItems, character, recipe)
             
             -- Debug: log consumed items
             local debugMsg = "ZItemTiers: [ISHandcraftAction] Crafting with " .. consumedItems:size() .. " ingredients: "

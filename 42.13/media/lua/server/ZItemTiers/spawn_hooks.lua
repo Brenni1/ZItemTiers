@@ -9,12 +9,31 @@ require "ZItemTiers/core"
 local function applyRarityToItem(item, forceReapply)
     if not item or not item.getModData then return end
     
+    local itemType = nil
+    local successType, typeValue = pcall(function() return item:getFullType() end)
+    if successType and typeValue then
+        itemType = typeValue
+    end
+    
+    -- Debug logging for gas cans
+    if itemType and (string.find(itemType, "PetrolCan") or string.find(itemType, "GasCan")) then
+        print("ZItemTiers: [DEBUG] applyRarityToItem called for " .. itemType)
+    end
+    
     -- Safely get modData
     local success, modData = pcall(function() return item:getModData() end)
-    if not success or not modData then return end
+    if not success or not modData then 
+        if itemType and (string.find(itemType, "PetrolCan") or string.find(itemType, "GasCan")) then
+            print("ZItemTiers: [DEBUG] No modData for " .. itemType)
+        end
+        return 
+    end
     
     -- Skip items that were crafted with rarity (they already have their rarity set)
     if modData.craftedFromRarity then
+        if itemType and (string.find(itemType, "PetrolCan") or string.find(itemType, "GasCan")) then
+            print("ZItemTiers: [DEBUG] Skipping " .. itemType .. " - crafted from rarity")
+        end
         return
     end
     
@@ -34,6 +53,9 @@ local function applyRarityToItem(item, forceReapply)
         if hasActiveCrafting and not modData.itemRarity then
             -- Skip this item temporarily - crafting hook will apply rarity within a few ticks
             -- This prevents spawn_hooks from applying Common rarity before crafting hook applies Epic/Legendary/etc
+            if itemType and (string.find(itemType, "PetrolCan") or string.find(itemType, "GasCan")) then
+                print("ZItemTiers: [DEBUG] Skipping " .. itemType .. " - crafting in progress")
+            end
             return
         end
     end
@@ -47,29 +69,47 @@ local function applyRarityToItem(item, forceReapply)
             rarity = modData.itemRarity
         else
             -- Item already has rarity and we're not forcing re-apply, skip
+            if itemType and (string.find(itemType, "PetrolCan") or string.find(itemType, "GasCan")) then
+                print("ZItemTiers: [DEBUG] " .. itemType .. " already has rarity: " .. tostring(modData.itemRarity) .. ", skipping")
+            end
             return
         end
     else
         -- Item doesn't have rarity, roll for it
         if ZItemTiers and ZItemTiers.RollRarity then
             rarity = ZItemTiers.RollRarity()
+            if itemType and (string.find(itemType, "PetrolCan") or string.find(itemType, "GasCan")) then
+                print("ZItemTiers: [DEBUG] Rolled rarity for " .. itemType .. ": " .. tostring(rarity))
+            end
         end
     end
     
     -- Skip blacklisted items (keys, ID cards, etc.)
     if ZItemTiers and ZItemTiers.IsItemBlacklisted and ZItemTiers.IsItemBlacklisted(item) then
+        if itemType and (string.find(itemType, "PetrolCan") or string.find(itemType, "GasCan")) then
+            print("ZItemTiers: [DEBUG] " .. itemType .. " is blacklisted, skipping")
+        end
         return
     end
     
     if rarity then
         -- Apply rarity bonuses to all items (not just items with specific properties)
         if ZItemTiers and ZItemTiers.ApplyRarityBonuses then
+            if itemType and (string.find(itemType, "PetrolCan") or string.find(itemType, "GasCan")) then
+                print("ZItemTiers: [DEBUG] Calling ApplyRarityBonuses for " .. itemType .. " with rarity " .. tostring(rarity))
+            end
             local success13 = pcall(function() 
                 ZItemTiers.ApplyRarityBonuses(item, rarity)
             end)
             if not success13 then
-                -- Silently fail if bonus application fails
+                if itemType and (string.find(itemType, "PetrolCan") or string.find(itemType, "GasCan")) then
+                    print("ZItemTiers: [DEBUG] ERROR: ApplyRarityBonuses failed for " .. itemType)
+                end
             end
+        end
+    else
+        if itemType and (string.find(itemType, "PetrolCan") or string.find(itemType, "GasCan")) then
+            print("ZItemTiers: [DEBUG] No rarity for " .. itemType .. ", skipping bonus application")
         end
     end
 end
@@ -415,6 +455,81 @@ local function reapplyBonusesIfNeeded(item)
                     end
                 end
             end
+            
+                -- Check drainable capacity bonus (for Drainable items)
+                if modData.itemDrainableCapacityBonus then
+                    local isDrainable = false
+                    local successDrainable, resultDrainable = pcall(function()
+                        if item.getFluidContainer then
+                            local fluidContainer = item:getFluidContainer()
+                            return fluidContainer ~= nil
+                        end
+                        return false
+                    end)
+                    if successDrainable and resultDrainable then
+                        isDrainable = true
+                    end
+                    
+                    if isDrainable then
+                        local baseCapacity = modData.itemDrainableCapacityBase or 0
+                        if not modData.itemDrainableCapacityBase then
+                            local successGetBase, baseValue = pcall(function()
+                                if item.getFluidContainer then
+                                    local fluidContainer = item:getFluidContainer()
+                                    if fluidContainer and fluidContainer.getCapacity then
+                                        return fluidContainer:getCapacity()
+                                    end
+                                end
+                                return 0
+                            end)
+                            if successGetBase and baseValue then
+                                baseCapacity = baseValue
+                            end
+                        end
+
+                        local successGet, currentCapacity = pcall(function()
+                            if item.getFluidContainer then
+                                local fluidContainer = item:getFluidContainer()
+                                if fluidContainer and fluidContainer.getCapacity then
+                                    return fluidContainer:getCapacity()
+                                end
+                            end
+                            return baseCapacity
+                        end)
+                        
+                        if successGet and baseCapacity > 0 then
+                            -- Calculate expected capacity: base * (1 + bonus percentage / 100)
+                            local expectedCapacity = baseCapacity * (1 + modData.itemDrainableCapacityBonus / 100.0)
+                            if math.abs((currentCapacity or baseCapacity) - expectedCapacity) > 0.01 then
+                                needsReapply = true
+                            end
+                        end
+                    end
+                else
+                    -- Check if bonus should be stored but isn't (for drainable items with rarity)
+                    local rarity = modData.itemRarity
+                    if rarity and rarity ~= "Common" then
+                        local bonuses = ZItemTiers and ZItemTiers.RarityBonuses and ZItemTiers.RarityBonuses[rarity]
+                        if bonuses and bonuses.drainableCapacityBonus then
+                            local isDrainable = false
+                            local successDrainable, resultDrainable = pcall(function()
+                                if item.getFluidContainer then
+                                    local fluidContainer = item:getFluidContainer()
+                                    return fluidContainer ~= nil
+                                end
+                                return false
+                            end)
+                            if successDrainable and resultDrainable then
+                                isDrainable = true
+                            end
+                            
+                            if isDrainable then
+                                -- Bonus is missing, needs reapplication
+                                needsReapply = true
+                            end
+                        end
+                    end
+                end
             
             if needsReapply then
                 -- Re-apply all bonuses
