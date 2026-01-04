@@ -88,6 +88,7 @@ ZItemTiers.RarityBonuses = {
         capacityBonus = 10,  -- +10% capacity (for InventoryContainer)
         maxEncumbranceBonus = 0.1,  -- +0.1 maximum item encumbrance (for InventoryContainer)
         drainableCapacityBonus = 10,  -- +10% capacity (for Drainable items)
+        visionImpairmentReduction = 0.05,  -- -0.05 vision impairment (for Clothing with vision impairment)
     },
     Rare = {
         weightReduction = 20,  -- 20% weight reduction (for item's own weight)
@@ -99,6 +100,7 @@ ZItemTiers.RarityBonuses = {
         capacityBonus = 20,  -- +20% capacity (for InventoryContainer)
         maxEncumbranceBonus = 0.2,  -- +0.2 maximum item encumbrance (for InventoryContainer)
         drainableCapacityBonus = 20,  -- +20% capacity (for Drainable items)
+        visionImpairmentReduction = 0.10,  -- -0.10 vision impairment (for Clothing with vision impairment)
     },
     Epic = {
         weightReduction = 30,  -- 30% weight reduction (for item's own weight)
@@ -110,6 +112,7 @@ ZItemTiers.RarityBonuses = {
         capacityBonus = 30,  -- +30% capacity (for InventoryContainer)
         maxEncumbranceBonus = 0.3,  -- +0.3 maximum item encumbrance (for InventoryContainer)
         drainableCapacityBonus = 30,  -- +30% capacity (for Drainable items)
+        visionImpairmentReduction = 0.15,  -- -0.15 vision impairment (for Clothing with vision impairment)
     },
     Legendary = {
         weightReduction = 50,  -- 50% weight reduction (for item's own weight)
@@ -121,6 +124,7 @@ ZItemTiers.RarityBonuses = {
         capacityBonus = 50, -- +50% capacity (for InventoryContainer)
         maxEncumbranceBonus = 0.5, -- +0.5 maximum item encumbrance (for InventoryContainer)
         drainableCapacityBonus = 50,  -- +50% capacity (for Drainable items)
+        visionImpairmentReduction = 0.25,  -- -0.25 vision impairment (for Clothing with vision impairment)
     },
 }
 
@@ -299,6 +303,11 @@ function ZItemTiers.ApplyRarityBonuses(item, rarity)
     -- Store drainable capacity bonus so we can re-apply it if it gets reset
     if bonuses.drainableCapacityBonus then
         modData.itemDrainableCapacityBonus = bonuses.drainableCapacityBonus
+    end
+    
+    -- Store vision impairment reduction so we can re-apply it if it gets reset
+    if bonuses.visionImpairmentReduction then
+        modData.itemVisionImpairmentReduction = bonuses.visionImpairmentReduction
     end
     
     -- Special handling for HandWeapon items
@@ -937,6 +946,91 @@ function ZItemTiers.ApplyRarityBonuses(item, rarity)
         end
     end
     
+    -- Apply vision impairment reduction (for Clothing items with vision impairment)
+    if bonuses.visionImpairmentReduction then
+        local isClothing = false
+        local successClothing, resultClothing = pcall(function()
+            return instanceof(item, "Clothing")
+        end)
+        if successClothing and resultClothing then
+            isClothing = true
+        end
+        
+        if isClothing then
+            -- Get base vision modifier from script item
+            -- Vision modifier: 1.0 = no impairment, < 1.0 = impairment (lower = worse)
+            -- We want to increase the modifier (make it closer to 1.0) by adding the reduction
+            local baseVisionMod = 1.0
+            local successGetBase, baseValue = pcall(function()
+                if item.getScriptItem then
+                    local scriptItem = item:getScriptItem()
+                    if scriptItem then
+                        -- Try getVisionModifier method first
+                        if scriptItem.getVisionModifier then
+                            return scriptItem:getVisionModifier()
+                        end
+                        -- Fallback: try visionModifier property
+                        if scriptItem.visionModifier then
+                            return scriptItem.visionModifier
+                        end
+                    end
+                end
+                -- Also try instance method
+                if item.getVisionModifier then
+                    return item:getVisionModifier()
+                end
+                return 1.0
+            end)
+            if successGetBase and baseValue then
+                baseVisionMod = baseValue
+            end
+            
+            -- Only apply if the item has vision impairment (modifier < 1.0)
+            if baseVisionMod < 1.0 then
+                -- Get current vision modifier from the instance
+                local successGet, currentVisionMod = pcall(function()
+                    if item.getVisionModifier then
+                        return item:getVisionModifier()
+                    end
+                    -- Fallback: try to get from script item
+                    if item.getScriptItem then
+                        local scriptItem = item:getScriptItem()
+                        if scriptItem then
+                            if scriptItem.getVisionModifier then
+                                return scriptItem:getVisionModifier()
+                            end
+                            if scriptItem.visionModifier then
+                                return scriptItem.visionModifier
+                            end
+                        end
+                    end
+                    return baseVisionMod
+                end)
+                
+                if successGet then
+                    -- Calculate expected new value: base + reduction (additive, but don't go above 1.0)
+                    -- The modifier represents impairment when < 1.0, so increasing it means less impairment
+                    local newVisionMod = math.min(1.0, baseVisionMod + bonuses.visionImpairmentReduction)
+                    
+                    -- Store base value and reduction in modData for Java patch
+                    -- The Java patch will read itemVisionImpairmentReduction from modData and apply it to getVisionModifier()
+                    if modData then
+                        modData.itemVisionImpairmentBase = baseVisionMod
+                        modData.itemVisionImpairmentReduction = bonuses.visionImpairmentReduction
+                        print("ZItemTiers: Stored vision impairment reduction +" .. bonuses.visionImpairmentReduction .. " for clothing: " .. tostring(item:getFullType()) .. " (base: " .. baseVisionMod .. ", will be: " .. newVisionMod .. " via Java patch)")
+                    end
+                else
+                    print("ZItemTiers: ERROR: Could not get current vision modifier for " .. tostring(item:getFullType()))
+                end
+            else
+                -- Debug: log when item doesn't have vision impairment
+                if item:getFullType() and string.find(item:getFullType(), "SafetyGoggles") then
+                    print("ZItemTiers: [DEBUG] SafetyGoggles vision modifier: " .. tostring(baseVisionMod) .. " (no reduction applied, modifier >= 1.0)")
+                end
+            end
+        end
+    end
+    
     -- Mark bonuses as applied to prevent multiple applications
     -- Use the global session ID initialized once per game session
     if modData then
@@ -1163,16 +1257,55 @@ function ZItemTiers.GetItemBonuses(item)
             isDrainable = true
         end
         
-        if bonuses.drainableCapacityBonus and isDrainable then
-            table.insert(bonusList, {
-                type = "DrainableCapacityBonus",
-                value = bonuses.drainableCapacityBonus,
-                displayName = "Liquid Capacity"
-            })
-        end
-        
-        return bonusList
+    if bonuses.drainableCapacityBonus and isDrainable then
+        table.insert(bonusList, {
+            type = "DrainableCapacityBonus",
+            value = bonuses.drainableCapacityBonus,
+            displayName = "Liquid Capacity"
+        })
     end
+    
+    -- Check if this is a Clothing item with vision impairment to show vision impairment reduction
+    local isClothingWithVisionImpair = false
+    local successClothing, resultClothing = pcall(function()
+        return instanceof(item, "Clothing")
+    end)
+    if successClothing and resultClothing then
+        -- Check if item has vision impairment (vision modifier < 1.0)
+        local successGetBase, baseValue = pcall(function()
+            if item.getScriptItem then
+                local scriptItem = item:getScriptItem()
+                if scriptItem then
+                    if scriptItem.getVisionModifier then
+                        return scriptItem:getVisionModifier()
+                    end
+                    if scriptItem.visionModifier then
+                        return scriptItem.visionModifier
+                    end
+                end
+            end
+            -- Also try instance method
+            if item.getVisionModifier then
+                return item:getVisionModifier()
+            end
+            return 1.0
+        end)
+        if successGetBase and baseValue and baseValue < 1.0 then
+            isClothingWithVisionImpair = true
+        end
+    end
+    
+    if bonuses.visionImpairmentReduction and isClothingWithVisionImpair then
+        local visionImpairValue = string.format("%.2f", bonuses.visionImpairmentReduction)
+        table.insert(bonusList, {
+            type = "VisionImpairmentReduction",
+            value = visionImpairValue,
+            displayName = "Vision Impairment Reduction"
+        })
+    end
+    
+    return bonusList
+end
 
 -- Get bonus display name
 function ZItemTiers.GetBonusDisplayName(bonusType)
@@ -1185,8 +1318,9 @@ function ZItemTiers.GetBonusDisplayName(bonusType)
         BiteDefenseBonus = "Bite Defense",
         ScratchDefenseBonus = "Scratch Defense",
         CapacityBonus = "Capacity",
-        DrainableCapacityBonus = "Liquid Capacity",
-    }
+    DrainableCapacityBonus = "Liquid Capacity",
+    VisionImpairmentReduction = "Vision Impairment Reduction",
+}
     return displayNames[bonusType] or bonusType
 end
 

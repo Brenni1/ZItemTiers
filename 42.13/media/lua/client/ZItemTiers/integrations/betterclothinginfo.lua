@@ -38,6 +38,7 @@ if hasBetterClothingInfo and _G and _G.DoTooltipClothing and DrawItem and SetIte
         function _G.SetItemInfoAsText(newItemValue, label, layoutItem, layoutTooltip)
             local item = ZItemTiers._currentItemForTooltip
             local rarityColor = nil
+            local displayValue = newItemValue
             
             if item then
                 local modData = item:getModData()
@@ -46,11 +47,23 @@ if hasBetterClothingInfo and _G and _G.DoTooltipClothing and DrawItem and SetIte
                 end
             end
             
-            -- Apply custom color if label is "Rarity" or "Bonuses"
-            if rarityColor and (label == "Rarity" or label == "Bonuses") then
+            -- Apply custom color if label is "Rarity" or empty (bonus rows)
+            if rarityColor and (label == "Rarity" or label == "") then
+                -- Extract just the display value (remove the item type and ID suffix we added for uniqueness)
+                -- Format: "RarityName_ItemType_ItemID" -> "RarityName"
+                -- Or: "BonusText_ItemType_ItemID_BonusType" -> "BonusText"
+                if string.find(newItemValue, "_") then
+                    displayValue = string.match(newItemValue, "^([^_]+)")
+                end
+                
                 layoutItem = layoutTooltip:addItem()
-                layoutItem:setLabel(getText(label) .. ":", rarityColor.r, rarityColor.g, rarityColor.b, 1.0)
-                layoutItem:setValue(newItemValue, rarityColor.r, rarityColor.g, rarityColor.b, 1.0)
+                if label == "Rarity" then
+                    layoutItem:setLabel(getText(label) .. ":", rarityColor.r, rarityColor.g, rarityColor.b, 1.0)
+                else
+                    -- Empty label for bonus rows
+                    layoutItem:setLabel("", rarityColor.r, rarityColor.g, rarityColor.b, 1.0)
+                end
+                layoutItem:setValue(displayValue, rarityColor.r, rarityColor.g, rarityColor.b, 1.0)
             else
                 -- Call original SetItemInfoAsText
                 originalSetItemInfoAsText(newItemValue, label, layoutItem, layoutTooltip)
@@ -80,22 +93,16 @@ if hasBetterClothingInfo and _G and _G.DoTooltipClothing and DrawItem and SetIte
                     local rarityData = ZItemTiers.Rarities[rarity]
                     local rarityName = rarityData.name
                     
-                    -- Build bonuses text from fixed bonuses
-                    local bonusTexts = {}
-                    for _, bonus in ipairs(itemBonuses) do
-                        local bonusName = ZItemTiers.GetBonusDisplayName(bonus.type)
-                        if bonus.value then
-                            table.insert(bonusTexts, "+" .. bonus.value .. "% " .. bonusName)
-                        end
-                    end
-                    
                     -- Create DrawItem for rarity using the same pattern as BetterClothingInfo
+                    -- Include rarity in the item value to ensure items with different rarities are treated as different items
+                    -- This prevents BetterClothingInfo from skipping comparison when comparing Rare vs Common items
+                    local rarityItemValue = rarityName .. "_" .. tostring(item:getFullType()) .. "_" .. tostring(item:getID())
                     local rarityDrawItem = DrawItem:New(
-                        rarityName,  -- newItemValue: string (rarity name)
-                        nil,         -- icon
-                        "Rarity",    -- label
-                        nil,         -- layoutItem
-                        layoutTooltip, -- layoutTooltip
+                        rarityItemValue,  -- newItemValue: string (includes rarity + item type + ID to make it unique)
+                        nil,              -- icon
+                        "Rarity",         -- label
+                        nil,              -- layoutItem
+                        layoutTooltip,    -- layoutTooltip
                         nil,
                         nil,
                         nil
@@ -106,23 +113,42 @@ if hasBetterClothingInfo and _G and _G.DoTooltipClothing and DrawItem and SetIte
                         rarityDrawItem:Render(true)
                     end
                     
-                    -- If there are bonuses, create another DrawItem for them
-                    if #bonusTexts > 0 then
-                        local bonusText = table.concat(bonusTexts, ", ")
-                        local bonusDrawItem = DrawItem:New(
-                            bonusText,  -- newItemValue: string (bonus text)
-                            nil,        -- icon
-                            "Bonuses",  -- label
-                            nil,        -- layoutItem
-                            layoutTooltip, -- layoutTooltip
-                            nil,
-                            nil,
-                            nil
-                        )
-                        
-                        -- Render the bonuses DrawItem
-                        if bonusDrawItem and bonusDrawItem.Render then
-                            bonusDrawItem:Render(true)
+                    -- Create a separate DrawItem for each bonus (one row per bonus)
+                    -- Each bonus row has empty label, so it just shows "+20% Damage" on the right
+                    for _, bonus in ipairs(itemBonuses) do
+                        local bonusName = ZItemTiers.GetBonusDisplayName(bonus.type)
+                        if bonus.value then
+                            -- Format bonus text (e.g., "+20% Damage")
+                            local bonusText = ""
+                            -- Format based on bonus type
+                            if bonus.type == "RunSpeedModifier" or bonus.type == "VisionImpairmentReduction" then
+                                -- These are already formatted with decimal places (e.g., "0.1")
+                                bonusText = "+" .. bonus.value .. " " .. bonusName
+                            elseif bonus.type == "EncumbranceReduction" or bonus.type == "MaxEncumbranceBonus" or bonus.type == "BiteDefenseBonus" or bonus.type == "ScratchDefenseBonus" then
+                                -- These are flat values, no % sign (e.g., "+5 Bite Defense")
+                                bonusText = "+" .. bonus.value .. " " .. bonusName
+                            else
+                                -- Percentage bonuses (e.g., "+20% Damage")
+                                bonusText = "+" .. bonus.value .. "% " .. bonusName
+                            end
+                            
+                            -- Create unique item value for this specific bonus
+                            local bonusItemValue = bonusText .. "_" .. tostring(item:getFullType()) .. "_" .. tostring(item:getID()) .. "_" .. bonus.type
+                            local bonusDrawItem = DrawItem:New(
+                                bonusItemValue,  -- newItemValue: string (bonus text + item type + ID + bonus type to make it unique)
+                                nil,             -- icon
+                                "",              -- label: empty string so only the value is shown
+                                nil,             -- layoutItem
+                                layoutTooltip,   -- layoutTooltip
+                                nil,
+                                nil,
+                                nil
+                            )
+                            
+                            -- Render the bonus DrawItem
+                            if bonusDrawItem and bonusDrawItem.Render then
+                                bonusDrawItem:Render(true)
+                            end
                         end
                     end
                 end

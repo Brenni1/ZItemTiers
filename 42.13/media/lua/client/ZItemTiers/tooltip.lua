@@ -44,21 +44,35 @@ local function addRarityToLayout(item, layout)
             end
         end
         
-        -- Build bonuses text from fixed bonuses
-        local bonusTexts = {}
+        -- Add each bonus on its own row with empty label
+        -- Each bonus row shows just the bonus text on the right (e.g., "+20% Damage")
         for _, bonus in ipairs(itemBonuses) do
             local bonusName = ZItemTiers.GetBonusDisplayName(bonus.type)
-            if bonus.value then
-                table.insert(bonusTexts, "+" .. bonus.value .. "% " .. bonusName)
-            end
-        end
-        
-        -- Add bonuses if we have any
-        if #bonusTexts > 0 and layout and layout.addItem then
-            local bonusItem = layout:addItem()
-            if bonusItem and bonusItem.setLabel then
-                local bonusText = table.concat(bonusTexts, ", ")
-                bonusItem:setLabel("Bonuses: " .. bonusText, color.r, color.g, color.b, 1.0)
+            if bonus.value and layout and layout.addItem then
+                -- Format bonus text based on bonus type
+                local bonusText = ""
+                if bonus.type == "RunSpeedModifier" or bonus.type == "VisionImpairmentReduction" then
+                    -- These are already formatted with decimal places (e.g., "0.1")
+                    bonusText = "+" .. bonus.value .. " " .. bonusName
+                elseif bonus.type == "EncumbranceReduction" or bonus.type == "MaxEncumbranceBonus" or bonus.type == "BiteDefenseBonus" or bonus.type == "ScratchDefenseBonus" then
+                    -- These are flat values, no % sign (e.g., "+5 Bite Defense")
+                    bonusText = "+" .. bonus.value .. " " .. bonusName
+                else
+                    -- Percentage bonuses (e.g., "+20% Damage")
+                    bonusText = "+" .. bonus.value .. "% " .. bonusName
+                end
+                
+                -- Create a separate item for each bonus
+                local bonusItem = layout:addItem()
+                if bonusItem then
+                    -- Empty label so only the value is shown on the right
+                    if bonusItem.setLabel then
+                        bonusItem:setLabel("", color.r, color.g, color.b, 1.0)
+                    end
+                    if bonusItem.setValue then
+                        bonusItem:setValue(bonusText, color.r, color.g, color.b, 1.0)
+                    end
+                end
             end
         end
     end
