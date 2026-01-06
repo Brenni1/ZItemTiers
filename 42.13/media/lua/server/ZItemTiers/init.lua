@@ -2,9 +2,22 @@
 -- Applies probability-based rarity system to distribution tables after they're loaded
 
 require "ZItemTiers/core"
+require "ZItemTiers/bonus_display"
 require "ZItemTiers/items"
 require "ZItemTiers/spawn_hooks"
 require "ZItemTiers/crafting"
+require "ZItemTiers/reading_speed"
+require "ZItemTiers/vhs_skill_xp"
+require "ZItemTiers/mood_bonus"
+require "ZItemTiers/weight_reduction"
+require "ZItemTiers/encumbrance_reduction"
+require "ZItemTiers/run_speed"
+require "ZItemTiers/defense_bonuses"
+require "ZItemTiers/capacity_bonus"
+require "ZItemTiers/max_encumbrance_bonus"
+require "ZItemTiers/drainable_capacity"
+require "ZItemTiers/vision_impairment"
+require "ZItemTiers/damage_multiplier"
 
 -- Apply rarities after distributions are merged
 local function applyLootRarities()

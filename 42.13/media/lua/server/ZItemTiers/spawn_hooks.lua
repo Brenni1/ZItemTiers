@@ -37,6 +37,12 @@ local function applyRarityToItem(item, forceReapply)
         return
     end
     
+    -- Check if this is a VHS item for logging
+    local isVHS = false
+    if itemType and string.find(itemType, "VHS") then
+        isVHS = true
+    end
+    
     -- Skip items that might be in the crafting process (check if crafting state exists)
     -- This prevents spawn_hooks from applying Common rarity to items that are about to get crafting rarity
     if ZItemTiers and ZItemTiers._craftingState then
@@ -53,9 +59,7 @@ local function applyRarityToItem(item, forceReapply)
         if hasActiveCrafting and not modData.itemRarity then
             -- Skip this item temporarily - crafting hook will apply rarity within a few ticks
             -- This prevents spawn_hooks from applying Common rarity before crafting hook applies Epic/Legendary/etc
-            if itemType and (string.find(itemType, "PetrolCan") or string.find(itemType, "GasCan")) then
-                print("ZItemTiers: [DEBUG] Skipping " .. itemType .. " - crafting in progress")
-            end
+            print("ZItemTiers: [spawn_hooks] Skipping " .. tostring(itemType) .. " - crafting in progress (will be handled by crafting hook)")
             return
         end
     end
@@ -67,10 +71,13 @@ local function applyRarityToItem(item, forceReapply)
         if forceReapply then
             -- Re-apply bonuses for existing items (for migration/fixes)
             rarity = modData.itemRarity
+            if isVHS then
+                print("ZItemTiers: [VHS] Re-applying bonuses for " .. itemType .. " (existing rarity: " .. tostring(rarity) .. ")")
+            end
         else
             -- Item already has rarity and we're not forcing re-apply, skip
-            if itemType and (string.find(itemType, "PetrolCan") or string.find(itemType, "GasCan")) then
-                print("ZItemTiers: [DEBUG] " .. itemType .. " already has rarity: " .. tostring(modData.itemRarity) .. ", skipping")
+            if isVHS then
+                print("ZItemTiers: [VHS] " .. itemType .. " already has rarity: " .. tostring(modData.itemRarity) .. ", skipping")
             end
             return
         end
@@ -78,16 +85,16 @@ local function applyRarityToItem(item, forceReapply)
         -- Item doesn't have rarity, roll for it
         if ZItemTiers and ZItemTiers.RollRarity then
             rarity = ZItemTiers.RollRarity()
-            if itemType and (string.find(itemType, "PetrolCan") or string.find(itemType, "GasCan")) then
-                print("ZItemTiers: [DEBUG] Rolled rarity for " .. itemType .. ": " .. tostring(rarity))
+            if isVHS then
+                print("ZItemTiers: [VHS] Rolled rarity for " .. itemType .. ": " .. tostring(rarity))
             end
         end
     end
     
     -- Skip blacklisted items (keys, ID cards, etc.)
     if ZItemTiers and ZItemTiers.IsItemBlacklisted and ZItemTiers.IsItemBlacklisted(item) then
-        if itemType and (string.find(itemType, "PetrolCan") or string.find(itemType, "GasCan")) then
-            print("ZItemTiers: [DEBUG] " .. itemType .. " is blacklisted, skipping")
+        if isVHS then
+            print("ZItemTiers: [VHS] " .. itemType .. " is blacklisted, skipping")
         end
         return
     end
@@ -95,21 +102,21 @@ local function applyRarityToItem(item, forceReapply)
     if rarity then
         -- Apply rarity bonuses to all items (not just items with specific properties)
         if ZItemTiers and ZItemTiers.ApplyRarityBonuses then
-            if itemType and (string.find(itemType, "PetrolCan") or string.find(itemType, "GasCan")) then
-                print("ZItemTiers: [DEBUG] Calling ApplyRarityBonuses for " .. itemType .. " with rarity " .. tostring(rarity))
+            if isVHS then
+                print("ZItemTiers: [VHS] Calling ApplyRarityBonuses for " .. itemType .. " with rarity " .. tostring(rarity))
             end
             local success13 = pcall(function() 
                 ZItemTiers.ApplyRarityBonuses(item, rarity)
             end)
             if not success13 then
-                if itemType and (string.find(itemType, "PetrolCan") or string.find(itemType, "GasCan")) then
-                    print("ZItemTiers: [DEBUG] ERROR: ApplyRarityBonuses failed for " .. itemType)
+                if isVHS then
+                    print("ZItemTiers: [VHS] ERROR: ApplyRarityBonuses failed for " .. itemType)
                 end
             end
         end
     else
-        if itemType and (string.find(itemType, "PetrolCan") or string.find(itemType, "GasCan")) then
-            print("ZItemTiers: [DEBUG] No rarity for " .. itemType .. ", skipping bonus application")
+        if isVHS then
+            print("ZItemTiers: [VHS] No rarity for " .. itemType .. ", skipping bonus application")
         end
     end
 end
@@ -544,28 +551,103 @@ local function reapplyBonusesIfNeeded(item)
     end
 end
 
--- Hook into OnContainerUpdate to apply rarity to items added to containers
--- This catches items added via crafting, looting, etc.
--- Event signature: (container)
-local function onContainerUpdate(container)
+-- Process world items on a square (items laying on the ground)
+local function processSquareWorldItems(square)
+    if not square then return end
+    
+    local worldObjects = square:getWorldObjects()
+    if not worldObjects then return end
+    
+    for i = 0, worldObjects:size() - 1 do
+        local worldObj = worldObjects:get(i)
+        if worldObj and worldObj.getItem then
+            local item = worldObj:getItem()
+            if item then
+                local successGetType, itemType = pcall(function()
+                    return item:getFullType()
+                end)
+                local itemTypeStr = successGetType and itemType or "unknown"
+                print("ZItemTiers: [DEBUG] Checking world item: " .. itemTypeStr)
+                applyRarityToItem(item, true) -- Force re-apply bonuses (for items loaded from save)
+                reapplyBonusesIfNeeded(item)
+            end
+        end
+    end
+end
+
+-- Process all items in a container (used when container is accessed)
+local function processContainerItems(container)
     if not container then return end
     
-    -- Safely check if container has getItems method
-    local success, items = pcall(function()
-        if container.getItems then
-            return container:getItems()
-        end
-        return nil
+    -- Check if container has getItems method
+    if not container.getItems then return end
+    
+    local successGetItems, items = pcall(function()
+        return container:getItems()
     end)
+    if not successGetItems or not items then return end
     
-    if not success or not items then return end
-    
-    -- Process all items in the container
     for i = 0, items:size() - 1 do
         local item = items:get(i)
-        applyRarityToItem(item)
-        -- Also check if bonuses need to be re-applied (for items loaded from save)
-        reapplyBonusesIfNeeded(item)
+        if item then
+            local successGetType, itemType = pcall(function()
+                return item:getFullType()
+            end)
+            local itemTypeStr = successGetType and itemType or "unknown"
+            print("ZItemTiers: [DEBUG] Checking item: " .. itemTypeStr)
+            applyRarityToItem(item, true) -- Force re-apply bonuses (for items loaded from save)
+            reapplyBonusesIfNeeded(item)
+        end
+    end
+end
+
+-- Hook into OnContainerUpdate to apply rarity to items when containers are accessed/updated
+-- This catches items when:
+-- - Player opens a container (loot window)
+-- - Items are added/removed from containers
+-- - Items are picked up from ground (added to inventory)
+-- - Floor container is accessed (world items on the ground)
+-- Event signature: (container)
+local function onContainerUpdate(container)
+    if not ZItemTiers then return end
+    if not container then return end
+    
+    -- Check if container has getType method
+    if not container.getType then
+        -- If no getType method, try to process items directly (might be a special container)
+        processContainerItems(container)
+        return
+    end
+    
+    -- Check if this is the floor container (world items on the ground)
+    local successGetType, containerType = pcall(function()
+        return container:getType()
+    end)
+    if successGetType and containerType == "floor" then
+        -- For floor container, process world items on all nearby squares
+        -- Get the player to find their current square
+        local player = getPlayer()
+        if player then
+            local square = player:getCurrentSquare()
+            if square then
+                -- Process world items on the player's current square
+                processSquareWorldItems(square)
+                -- Also process adjacent squares (in case items are on nearby squares)
+                for dx = -1, 1 do
+                    for dy = -1, 1 do
+                        if not (dx == 0 and dy == 0) then
+                            local adjSquare = getCell():getGridSquare(square:getX() + dx, square:getY() + dy, square:getZ())
+                            if adjSquare then
+                                processSquareWorldItems(adjSquare)
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    else
+        -- Process all items in the container when it's updated
+        processContainerItems(container)
     end
 end
 
@@ -574,6 +656,7 @@ Events.OnContainerUpdate.Add(onContainerUpdate)
 
 -- Hook into ISInventoryPane:refreshContainer to ensure bonuses are applied when inventory is viewed
 -- This catches cases where items exist but bonuses weren't applied
+-- Also processes world items when loot window is opened
 local originalRefreshContainer = ISInventoryPane.refreshContainer
 if originalRefreshContainer then
     function ISInventoryPane:refreshContainer(...)
@@ -607,9 +690,7 @@ if originalRefreshContainer then
     end
 end
 
--- Optional: Apply rarity to existing items on game start (one-time migration)
--- This ensures items that already existed before the mod was installed get rarity
--- Also re-applies bonuses to items that already have rarity (for fixes/updates)
+
 local function onGameStart()
     -- Ensure ZItemTiers is initialized
     if not ZItemTiers then return end
@@ -618,98 +699,243 @@ local function onGameStart()
     if ZItemTiers._migrationRun then return end
     ZItemTiers._migrationRun = true
     
-    -- Process all items in the world
-    local processed = 0
-    local reapplied = 0
-    local cells = getCell()
-    if cells then
-        for x = 0, cells:getWidth() - 1 do
-            for y = 0, cells:getHeight() - 1 do
-                local square = cells:getGridSquare(x, y, 0)
-                if square then
-                    -- Process items on the ground
-                    local worldObjects = square:getWorldObjects()
-                    if worldObjects then
-                        for i = 0, worldObjects:size() - 1 do
-                            local worldObj = worldObjects:get(i)
-                            if worldObj and worldObj.getItem() then
-                                local item = worldObj.getItem()
-                                local hadRarity = false
-                                local success, modData = pcall(function() return item:getModData() end)
-                                if success and modData and modData.itemRarity then
-                                    hadRarity = true
-                                end
-                                applyRarityToItem(item, true) -- Force re-apply bonuses
-                                -- Also re-apply weight if needed (for items loaded from save)
-                                reapplyBonusesIfNeeded(item)
-                                if hadRarity then
-                                    reapplied = reapplied + 1
-                                else
-                                    processed = processed + 1
-                                end
-                            end
-                        end
-                    end
-                    
-                    -- Process items in containers on this square
-                    local container = square:getContainer()
-                    if container then
-                        local items = container:getItems()
-                        if items then
-                            for j = 0, items:size() - 1 do
-                                local item = items:get(j)
-                                local hadRarity = false
-                                local success, modData = pcall(function() return item:getModData() end)
-                                if success and modData and modData.itemRarity then
-                                    hadRarity = true
-                                end
-                                applyRarityToItem(item, true) -- Force re-apply bonuses
-                                -- Also re-apply weight if needed (for items loaded from save)
-                                reapplyBonusesIfNeeded(item)
-                                if hadRarity then
-                                    reapplied = reapplied + 1
-                                else
-                                    processed = processed + 1
-                                end
-                            end
+    -- Process items in player inventory on game start
+    local player = getPlayer()
+    if player then
+        local inv = player:getInventory()
+        if inv then
+            processContainerItems(inv)
+        end
+        
+        -- Also process world items on the player's current square and adjacent squares
+        local square = player:getCurrentSquare()
+        if square then
+            -- Process world items on the player's current square
+            processSquareWorldItems(square)
+            -- Also process adjacent squares (items might be on nearby squares)
+            for dx = -1, 1 do
+                for dy = -1, 1 do
+                    if not (dx == 0 and dy == 0) then
+                        local adjSquare = getCell():getGridSquare(square:getX() + dx, square:getY() + dy, square:getZ())
+                        if adjSquare then
+                            processSquareWorldItems(adjSquare)
                         end
                     end
                 end
             end
         end
     end
-    
-                    -- Process items in player inventory
-                    local player = getPlayer()
-                    if player then
-                        local inv = player:getInventory()
-                        if inv then
-                            local items = inv:getItems()
-                            if items then
-                                for i = 0, items:size() - 1 do
-                                    local item = items:get(i)
-                                    local hadRarity = false
-                                    local success, modData = pcall(function() return item:getModData() end)
-                                    if success and modData and modData.itemRarity then
-                                        hadRarity = true
-                                    end
-                                    applyRarityToItem(item, true) -- Force re-apply bonuses
-                                    -- Also re-apply weight if needed (for items loaded from save)
-                                    reapplyBonusesIfNeeded(item)
-                                    if hadRarity then
-                                        reapplied = reapplied + 1
-                                    else
-                                        processed = processed + 1
+end
+
+-- Hook into OnGameStart event for migration
+Events.OnGameStart.Add(onGameStart)
+
+-- Hook into ISRemoveSheetAction to apply rarity to produced sheets
+if ISRemoveSheetAction and ISRemoveSheetAction.complete then
+    local originalRemoveSheetComplete = ISRemoveSheetAction.complete
+    function ISRemoveSheetAction:complete()
+        -- Try to get the curtain's rarity before removing it
+        local curtainRarity = nil
+        local curtainItem = nil
+        
+        -- Check if self.item is an IsoCurtain or has curtains
+        if self.item then
+            if instanceof(self.item, "IsoCurtain") then
+                curtainItem = self.item
+            elseif instanceof(self.item, "IsoDoor") and self.item.HasCurtains then
+                local successGetCurtain, curtain = pcall(function()
+                    return self.item:HasCurtains()
+                end)
+                if successGetCurtain and curtain then
+                    curtainItem = curtain
+                end
+            end
+            
+            -- Try to get rarity from curtain's modData
+            if curtainItem and curtainItem.getModData then
+                local successGetModData, modData = pcall(function()
+                    return curtainItem:getModData()
+                end)
+                if successGetModData and modData and modData.itemRarity then
+                    curtainRarity = modData.itemRarity
+                    print("ZItemTiers: [RemoveCurtain] Found curtain rarity: " .. curtainRarity)
+                end
+            end
+        end
+        
+        -- Call original complete method
+        originalRemoveSheetComplete(self)
+        
+        -- Use OnTick to check for the sheet after a short delay (item might be added asynchronously)
+        local character = self.character
+        local storedRarity = curtainRarity  -- Store for use in OnTick handler
+        local checkTicks = 0
+        local maxTicks = 3  -- Check for 3 ticks
+        Events.OnTick.Add(function()
+            checkTicks = checkTicks + 1
+            
+            if checkTicks > maxTicks then
+                return false  -- Remove this event handler
+            end
+            
+            -- Apply rarity to the sheet that was just added to inventory
+            if character and character.getInventory then
+                local successGetInv, inv = pcall(function()
+                    return character:getInventory()
+                end)
+                
+                if successGetInv and inv and inv.getItems then
+                    local successGetItems, items = pcall(function()
+                        return inv:getItems()
+                    end)
+                    
+                    if successGetItems and items then
+                        -- Find a sheet without rarity
+                        for i = 0, items:size() - 1 do
+                            local item = items:get(i)
+                            if item and not ZItemTiers.IsItemBlacklisted(item) then
+                                local itemType = nil
+                                local successType, typeValue = pcall(function() return item:getFullType() end)
+                                if successType and typeValue then
+                                    itemType = typeValue
+                                end
+                                
+                                -- Check if this is a sheet
+                                if itemType and (itemType == "Base.Sheet" or string.find(itemType, "Sheet")) then
+                                    local modData = item:getModData()
+                                    if modData then
+                                        local currentRarity = modData.itemRarity
+                                        
+                                        -- Apply rarity if sheet doesn't have one yet
+                                        if not currentRarity then
+                                            -- Use stored rarity from curtain if available, otherwise roll new one
+                                            local rarity = storedRarity or ZItemTiers.RollRarity()
+                                            modData.itemRarity = rarity
+                                            
+                                            -- Apply the rarity bonuses
+                                            if ZItemTiers and ZItemTiers.ApplyRarityBonuses then
+                                                ZItemTiers.ApplyRarityBonuses(item, rarity)
+                                            end
+                                            
+                                            if storedRarity then
+                                                print("ZItemTiers: [RemoveCurtain] Preserved rarity " .. rarity .. " from curtain to produced sheet: " .. itemType)
+                                            else
+                                                print("ZItemTiers: [RemoveCurtain] Applied rarity " .. rarity .. " to produced sheet: " .. itemType)
+                                            end
+                                            return false  -- Found and applied, remove handler
+                                        end
                                     end
                                 end
                             end
                         end
                     end
-    
-    if processed > 0 or reapplied > 0 then
-        print("ZItemTiers: Applied rarity to " .. processed .. " new items, re-applied bonuses to " .. reapplied .. " existing items")
+                end
+            end
+            
+            return true
+        end)
     end
+    
+    print("ZItemTiers: Hooked ISRemoveSheetAction:complete for sheet rarity")
 end
 
--- Hook into OnGameStart event for migration
-Events.OnGameStart.Add(onGameStart)
+-- Hook into ISAddSheetAction to preserve sheet rarity when creating curtains
+if ISAddSheetAction and ISAddSheetAction.complete then
+    local originalAddSheetComplete = ISAddSheetAction.complete
+    function ISAddSheetAction:complete()
+        -- Get the sheet's rarity before it's removed from inventory
+        local sheetRarity = nil
+        if self.character and self.character.getInventory then
+            local successGetInv, inv = pcall(function()
+                return self.character:getInventory()
+            end)
+            
+            if successGetInv and inv and inv.FindAndReturn then
+                local successFindSheet, sheet = pcall(function()
+                    return inv:FindAndReturn("Sheet")
+                end)
+                
+                if successFindSheet and sheet then
+                    local successGetModData, modData = pcall(function()
+                        return sheet:getModData()
+                    end)
+                    if successGetModData and modData and modData.itemRarity then
+                        sheetRarity = modData.itemRarity
+                        print("ZItemTiers: [AddCurtain] Found sheet rarity: " .. sheetRarity)
+                    end
+                end
+            end
+        end
+        
+        -- Call original complete method (this will remove the sheet and create the curtain)
+        originalAddSheetComplete(self)
+        
+        -- Apply the sheet's rarity to the newly created curtain
+        if sheetRarity and self.item then
+            -- Use OnTick to check for the curtain after a short delay
+            local windowItem = self.item
+            local storedRarity = sheetRarity
+            local checkTicks = 0
+            local maxTicks = 3
+            Events.OnTick.Add(function()
+                checkTicks = checkTicks + 1
+                
+                if checkTicks > maxTicks then
+                    return false  -- Remove this event handler
+                end
+                
+                -- Find the curtain that was just created
+                if windowItem and windowItem.getSquare then
+                    local successGetSquare, square = pcall(function()
+                        return windowItem:getSquare()
+                    end)
+                    
+                    if successGetSquare and square then
+                        -- Check for curtains on this square and adjacent squares
+                        local squaresToCheck = {square}
+                        if windowItem.north then
+                            local adjSquare = getCell():getGridSquare(square:getX(), square:getY() - 1, square:getZ())
+                            if adjSquare then table.insert(squaresToCheck, adjSquare) end
+                        else
+                            local adjSquare = getCell():getGridSquare(square:getX() - 1, square:getY(), square:getZ())
+                            if adjSquare then table.insert(squaresToCheck, adjSquare) end
+                        end
+                        
+                        for _, sq in ipairs(squaresToCheck) do
+                            if sq and sq.getSpecialObjects then
+                                local successGetObjects, objects = pcall(function()
+                                    return sq:getSpecialObjects()
+                                end)
+                                
+                                if successGetObjects and objects then
+                                    for i = 0, objects:size() - 1 do
+                                        local obj = objects:get(i)
+                                        if obj and instanceof(obj, "IsoCurtain") then
+                                            local successGetModData, modData = pcall(function()
+                                                return obj:getModData()
+                                            end)
+                                            if successGetModData and modData then
+                                                local currentRarity = modData.itemRarity
+                                                
+                                                -- Apply rarity if curtain doesn't have one yet
+                                                if not currentRarity then
+                                                    modData.itemRarity = storedRarity
+                                                    print("ZItemTiers: [AddCurtain] Preserved rarity " .. storedRarity .. " from sheet to curtain")
+                                                    return false  -- Found and applied, remove handler
+                                                end
+                                            end
+                                        end
+                                    end
+                                end
+                            end
+                        end
+                    end
+                end
+                
+                return true
+            end)
+        end
+    end
+    
+    print("ZItemTiers: Hooked ISAddSheetAction:complete for curtain rarity")
+end

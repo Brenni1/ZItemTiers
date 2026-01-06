@@ -73,3 +73,30 @@ if not hasCleanUI and not ISInventoryPane._zItemTiers_hooked then
         self._zItemTiers_colorMap = nil
     end
 end
+
+-- Hook into ISInventoryPage:setNewContainer to trigger processing of world items when loot window opens for ground items
+local originalSetNewContainer = ISInventoryPage.setNewContainer
+if originalSetNewContainer then
+    function ISInventoryPage:setNewContainer(inventory)
+        local result = originalSetNewContainer(self, inventory)
+        
+        -- Check if this is the floor container (world items on the ground)
+        if inventory then
+            local successGetType, containerType = pcall(function()
+                return inventory:getType()
+            end)
+            if successGetType and containerType == "floor" then
+                -- Trigger OnContainerUpdate for the floor container
+                -- This will cause the server-side OnContainerUpdate hook to process world items
+                -- Use LuaEventManager to trigger the event
+                local successTrigger = pcall(function()
+                    if LuaEventManager then
+                        LuaEventManager.triggerEvent("OnContainerUpdate", inventory)
+                    end
+                end)
+            end
+        end
+        
+        return result
+    end
+end

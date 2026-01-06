@@ -54,11 +54,11 @@ local function addRarityToLayout(item, layout)
                 if bonus.type == "RunSpeedModifier" or bonus.type == "VisionImpairmentReduction" then
                     -- These are already formatted with decimal places (e.g., "0.1")
                     bonusText = "+" .. bonus.value .. " " .. bonusName
-                        elseif bonus.type == "EncumbranceReduction" or bonus.type == "MaxEncumbranceBonus" or bonus.type == "BiteDefenseBonus" or bonus.type == "ScratchDefenseBonus" then
-                            -- These are flat values, no % sign (e.g., "+5 Bite Defense")
+                        elseif bonus.type == "EncumbranceReduction" or bonus.type == "MaxEncumbranceBonus" or bonus.type == "BiteDefenseBonus" or bonus.type == "ScratchDefenseBonus" or bonus.type == "VhsSkillXpBonus" then
+                            -- These are flat values, no % sign (e.g., "+5 Bite Defense", "+50 Skill XP Bonus")
                             bonusText = "+" .. bonus.value .. " " .. bonusName
-                        elseif bonus.type == "MoodBonus" then
-                            -- Percentage bonus (e.g., "+10% Mood Benefits")
+                        elseif bonus.type == "MoodBonus" or bonus.type == "ReadingSpeedBonus" then
+                            -- Percentage bonuses (e.g., "+10% Mood Benefits", "+10% Reading Speed")
                             bonusText = "+" .. bonus.value .. "% " .. bonusName
                 else
                     -- Percentage bonuses (e.g., "+20% Damage")
@@ -107,6 +107,10 @@ function ZItemTiers.AddRarityToTooltip(item, tooltipUI, layout)
     -- This is handled by the Java patch for DoTooltipEmbedded
     -- For Clothing.DoTooltip, the layout is already part of the tooltip flow
 end
+
+-- Load reading speed hook (shared, but ensure it's loaded on client)
+require "ZItemTiers/reading_speed"
+require "ZItemTiers/vhs_skill_xp"
 
 -- Load integration modules
 require "ZItemTiers/integrations/starlit"
