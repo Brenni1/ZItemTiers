@@ -429,19 +429,28 @@ local function reapplyBonusesIfNeeded(item)
                 end
                 
                 if isContainer then
-                    -- Get base capacity from script item
+                    -- Get base capacity: prefer stored base, then script item getter, then instance
                     local baseCapacity = 0
-                    local successGetBase, baseValue = pcall(function()
-                        if item.getScriptItem then
-                            local scriptItem = item:getScriptItem()
-                            if scriptItem and scriptItem.capacity then
-                                return scriptItem.capacity
+                    if modData.itemCapacityBase and modData.itemCapacityBase > 0 then
+                        baseCapacity = modData.itemCapacityBase
+                    else
+                        local successGetBase, baseValue = pcall(function()
+                            if item.getScriptItem then
+                                local scriptItem = item:getScriptItem()
+                                if scriptItem then
+                                    if scriptItem.getCapacity then
+                                        return scriptItem:getCapacity()
+                                    end
+                                    if scriptItem.capacity then
+                                        return scriptItem.capacity
+                                    end
+                                end
                             end
+                            return 0
+                        end)
+                        if successGetBase and baseValue and baseValue > 0 then
+                            baseCapacity = baseValue
                         end
-                        return 0
-                    end)
-                    if successGetBase and baseValue then
-                        baseCapacity = baseValue
                     end
                     
                     local successGet, currentCapacity = pcall(function()
@@ -451,7 +460,7 @@ local function reapplyBonusesIfNeeded(item)
                         return baseCapacity
                     end)
                     
-                    if successGet then
+                    if successGet and baseCapacity > 0 then
                         -- Calculate expected capacity using percentage multiplier
                         local capacityMultiplier = 1.0 + (modData.itemCapacityBonus / 100.0)
                         local expectedValue = math.min(math.floor(baseCapacity * capacityMultiplier + 0.5), 50)
