@@ -42,6 +42,39 @@ function ZItemTiers.CalculateCraftingRarity(ingredientItems, character, recipe)
         end
     end
     
+    -- Fallback: if recipe method failed, try to manually check common crafting skills
+    if skillLevel == 0 and character then
+        local successFallback, fallbackLevel = pcall(function()
+            -- Check common crafting skills
+            local commonSkills = {
+                "Tailoring", "Cooking", "Metalworking", "Electricity", "Mechanics",
+                "Carpentry", "Farming", "Trapping", "Fishing", "FirstAid"
+            }
+            local maxLevel = 0
+            for _, skillName in ipairs(commonSkills) do
+                local perk = Perks[skillName]
+                if perk and character.getPerkLevel then
+                    local level = character:getPerkLevel(perk)
+                    if level and level > maxLevel then
+                        maxLevel = level
+                    end
+                end
+            end
+            return maxLevel
+        end)
+        if successFallback and fallbackLevel and fallbackLevel > 0 then
+            print("ZItemTiers: [Crafting] Using fallback skill level detection: " .. fallbackLevel)
+            skillLevel = fallbackLevel
+        end
+    end
+    
+    -- Debug: log skill level detection
+    if not character or not recipe then
+        print("ZItemTiers: [Crafting] WARNING: Missing character or recipe for skill level detection (character=" .. tostring(character ~= nil) .. ", recipe=" .. tostring(recipe ~= nil) .. ", skillLevel=" .. skillLevel .. ")")
+    else
+        print("ZItemTiers: [Crafting] Detected skill level: " .. skillLevel)
+    end
+    
     -- Collect rarities from all ingredients
     local rarityCounts = {}
     local totalIngredients = 0
@@ -94,14 +127,20 @@ function ZItemTiers.CalculateCraftingRarity(ingredientItems, character, recipe)
     -- Ensure output is at least the minimum rarity tier (Factorio rule: all Epic -> at least Epic)
     targetIndex = math.max(minRarityIndex, targetIndex)
     
+    -- Debug: log calculation before skill modifiers
+    print("ZItemTiers: [Crafting] Calculated targetIndex=" .. targetIndex .. " (skillLevel=" .. skillLevel .. ")")
+    
     -- Apply skill level modifiers
     if skillLevel == 0 then
         -- Skill level 0: 50% chance to be 1 tier lower
         local roll = ZombRand(10000) / 10000.0  -- Random 0.0 to 1.0
         if roll < 0.5 then
             -- Reduce by 1 tier (but not below Common/1)
+            local oldIndex = targetIndex
             targetIndex = math.max(1, targetIndex - 1)
-            print("ZItemTiers: [Crafting] Skill level 0 reduced tier from " .. (targetIndex + 1) .. " to " .. targetIndex)
+            print("ZItemTiers: [Crafting] Skill level 0 reduced tier from " .. oldIndex .. " to " .. targetIndex .. " (roll=" .. roll .. ")")
+        else
+            print("ZItemTiers: [Crafting] Skill level 0 kept tier at " .. targetIndex .. " (roll=" .. roll .. " >= 0.5)")
         end
     elseif skillLevel > 1 then
         -- Skill level > 1: Small chance to be 1 tier higher
@@ -115,8 +154,10 @@ function ZItemTiers.CalculateCraftingRarity(ingredientItems, character, recipe)
             targetIndex = math.min(5, targetIndex + 1)
             print("ZItemTiers: [Crafting] Skill level " .. skillLevel .. " upgraded tier from " .. oldIndex .. " to " .. targetIndex)
         end
+    else
+        -- Skill level 1: No change (keep calculated tier)
+        print("ZItemTiers: [Crafting] Skill level 1 kept tier at " .. targetIndex .. " (no change)")
     end
-    -- Skill level 1: No change (keep calculated tier)
     
     -- Clamp to valid rarity range (1-5)
     targetIndex = math.max(1, math.min(5, targetIndex))
@@ -289,11 +330,16 @@ if ISHandcraftAction and ISHandcraftAction.performRecipe then
         if character then
             local successId, id = pcall(function() 
                 if character.getOnlineID then
-                    return character:getOnlineID()
+                    local onlineId = character:getOnlineID()
+                    -- Normalize nil to 0 for single-player
+                    if onlineId == nil then
+                        return 0
+                    end
+                    return onlineId
                 end
-                return nil
+                return 0  -- Default to 0 for single-player
             end)
-            if successId and id then
+            if successId and id ~= nil then
                 characterId = id
             end
         end
@@ -312,7 +358,12 @@ if ISHandcraftAction and ISHandcraftAction.performRecipe then
                 end)
                 if successGetRecipe and recipeData and recipeData.getRecipe then
                     recipe = recipeData:getRecipe()
+                    print("ZItemTiers: [ISHandcraftAction] Retrieved recipe: " .. tostring(recipe))
+                else
+                    print("ZItemTiers: [ISHandcraftAction] WARNING: Could not retrieve recipe (successGetRecipe=" .. tostring(successGetRecipe) .. ", recipeData=" .. tostring(recipeData ~= nil) .. ")")
                 end
+            else
+                print("ZItemTiers: [ISHandcraftAction] WARNING: No logic available for recipe retrieval")
             end
             
             outputRarity = ZItemTiers.CalculateCraftingRarity(consumedItems, character, recipe)
@@ -330,34 +381,300 @@ if ISHandcraftAction and ISHandcraftAction.performRecipe then
             print(debugMsg)
             print("ZItemTiers: [ISHandcraftAction] Calculated output rarity: " .. outputRarity)
             
-            -- Store crafting state for Actions.addOrDropItem hook
+            -- Get expected output item types from recipe (if available)
+            local expectedOutputTypes = {}
+            if recipe then
+                local successGetOutputs, outputs = pcall(function()
+                    -- Try different methods to get output types
+                    if recipe.getOutputs then
+                        return recipe:getOutputs()
+                    elseif recipe.outputs then
+                        return recipe.outputs
+                    end
+                    return nil
+                end)
+                if successGetOutputs and outputs then
+                    -- outputs might be an ArrayList or table
+                    if type(outputs) == "table" then
+                        -- Check if it's an ArrayList (has size() method)
+                        local successSize, size = pcall(function()
+                            if outputs.size then
+                                return outputs:size()
+                            end
+                            return nil
+                        end)
+                        if successSize and size then
+                            -- It's an ArrayList
+                            for i = 0, size - 1 do
+                                local output = outputs:get(i)
+                                if output then
+                                    local successType, outputType = pcall(function()
+                                        if output.getFullType then
+                                            return output:getFullType()
+                                        elseif output.getType then
+                                            return output:getType()
+                                        elseif type(output) == "string" then
+                                            return output
+                                        end
+                                        return nil
+                                    end)
+                                    if successType and outputType then
+                                        expectedOutputTypes[outputType] = true
+                                    end
+                                end
+                            end
+                        else
+                            -- It's a regular table - iterate safely
+                            local successIterate, _ = pcall(function()
+                                for _, outputType in ipairs(outputs) do
+                                    if type(outputType) == "string" then
+                                        expectedOutputTypes[outputType] = true
+                                    end
+                                end
+                            end)
+                            if not successIterate then
+                                -- If ipairs fails, try treating it as a simple value
+                                if type(outputs) == "string" then
+                                    expectedOutputTypes[outputs] = true
+                                end
+                            end
+                        end
+                    end
+                end
+            end
+            
+            -- Take snapshot of existing item IDs BEFORE performing recipe (for OnContainerUpdate detection)
+            local preCraftItemIds = {}
+            if character and character.getInventory then
+                local inventory = character:getInventory()
+                if inventory then
+                    local successGetItems, items = pcall(function()
+                        if inventory.getItems then
+                            return inventory:getItems()
+                        end
+                        return nil
+                    end)
+                    if successGetItems and items then
+                        for i = 0, items:size() - 1 do
+                            local item = items:get(i)
+                            if item then
+                                local successId, itemId = pcall(function()
+                                    if item.getID then
+                                        return item:getID()
+                                    end
+                                    return nil
+                                end)
+                                if successId and itemId then
+                                    preCraftItemIds[itemId] = true
+                                end
+                            end
+                        end
+                    end
+                end
+            end
+            
+            -- Store rarities of consumed items for bundle/unbundle operations
+            local consumedRarities = {}
+            if consumedItems then
+                for i = 0, consumedItems:size() - 1 do
+                    local consumedItem = consumedItems:get(i)
+                    if consumedItem then
+                        -- Check if this is a bundle with stored rarities (unbundling scenario)
+                        local consumedModData = consumedItem:getModData()
+                        if consumedModData and consumedModData.bundledRarities then
+                            -- This is a bundle being unbundled - use stored rarities
+                            for _, storedRarity in ipairs(consumedModData.bundledRarities) do
+                                table.insert(consumedRarities, storedRarity)
+                            end
+                            print("ZItemTiers: [ISHandcraftAction] Found bundle with " .. #consumedModData.bundledRarities .. " stored rarities for unbundling")
+                        else
+                            -- Regular item - use its rarity (store ALL rarities including Common)
+                            local itemRarity = ZItemTiers.GetItemRarity(consumedItem)
+                            if itemRarity then
+                                table.insert(consumedRarities, itemRarity)
+                            else
+                                -- Default to Common if no rarity found
+                                table.insert(consumedRarities, "Common")
+                            end
+                        end
+                    end
+                end
+            end
+            
+            -- Store crafting state for Actions.addOrDropItem hook and OnContainerUpdate
             _craftingState[characterId] = {
                 rarity = outputRarity,
                 timestamp = getGameTime():getWorldAgeHours() or 0,
-                character = character
+                character = character,
+                preCraftItemIds = preCraftItemIds,
+                expectedOutputTypes = expectedOutputTypes,
+                consumedRarities = consumedRarities  -- Store for bundle preservation
             }
-            print("ZItemTiers: [ISHandcraftAction] Stored crafting state for character " .. characterId .. " with rarity " .. outputRarity)
+            local itemCount = 0
+            for _ in pairs(preCraftItemIds) do
+                itemCount = itemCount + 1
+            end
+            local expectedTypesCount = 0
+            for _ in pairs(expectedOutputTypes) do
+                expectedTypesCount = expectedTypesCount + 1
+            end
+            print("ZItemTiers: [ISHandcraftAction] Stored crafting state for character " .. characterId .. " with rarity " .. outputRarity .. " (snapshot: " .. itemCount .. " items, expected outputs: " .. expectedTypesCount .. ")")
         end
         
         -- Perform the original recipe (this will call Actions.addOrDropItem)
         local result = originalHandcraftPerformRecipe(self)
         
-        -- Clean up crafting state after a short delay (to allow Actions.addOrDropItem to process items if it's called)
-        if characterId and _craftingState[characterId] then
+        -- Try to get created items directly from logic after recipe is performed
+        if characterId and _craftingState[characterId] and self.logic then
+            local state = _craftingState[characterId]
+            local successGetItems, createdItems = pcall(function()
+                if self.logic.getCreatedOutputItems then
+                    local items = ArrayList.new()
+                    self.logic:getCreatedOutputItems(items)
+                    return items
+                end
+                return nil
+            end)
+            
+            if successGetItems and createdItems and createdItems:size() > 0 then
+                print("ZItemTiers: [ISHandcraftAction] Found " .. createdItems:size() .. " created items via getCreatedOutputItems")
+                for i = 0, createdItems:size() - 1 do
+                    local item = createdItems:get(i)
+                    if item then
+                        local itemType = item:getFullType()
+                        local modData = item:getModData()
+                        if modData and not ZItemTiers.IsItemBlacklisted(item) then
+                            local currentRarity = modData.itemRarity
+                            local isCrafted = modData.craftedFromRarity == true
+                            
+                            if not currentRarity or (currentRarity == "Common" and not isCrafted) then
+                                print("ZItemTiers: [ISHandcraftAction] Applying rarity " .. state.rarity .. " to created item: " .. itemType .. " (was: " .. tostring(currentRarity) .. ")")
+                                modData.itemRarity = state.rarity
+                                modData.craftedFromRarity = true
+                                
+                                -- If this is a bundle and we have consumed rarities, store them for later restoration
+                                if state.consumedRarities and #state.consumedRarities > 0 then
+                                    if string.find(itemType, "Bundle") then
+                                        modData.bundledRarities = state.consumedRarities
+                                        print("ZItemTiers: [ISHandcraftAction] Stored " .. #state.consumedRarities .. " consumed rarities in bundle modData")
+                                    end
+                                end
+                                
+                                if ZItemTiers and ZItemTiers.ApplyRarityBonuses then
+                                    ZItemTiers.ApplyRarityBonuses(item, state.rarity)
+                                end
+                                print("ZItemTiers: [ISHandcraftAction] Applied rarity " .. state.rarity .. " to created item: " .. itemType)
+                            else
+                                print("ZItemTiers: [ISHandcraftAction] Item already has rarity: " .. tostring(currentRarity) .. " (skipping)")
+                            end
+                        end
+                    end
+                end
+                -- Clean up state immediately since we handled it
+                _craftingState[characterId] = nil
+                print("ZItemTiers: [ISHandcraftAction] Cleaned up crafting state after direct item application")
+            else
+                -- Fallback: use OnTick to scan inventory for new items
+                print("ZItemTiers: [ISHandcraftAction] Could not get created items directly, using OnTick fallback")
             local cleanupCharacterId = characterId
             local cleanupTicks = 0
+                local foundItem = false
             Events.OnTick.Add(function()
                 cleanupTicks = cleanupTicks + 1
-                -- Clean up after 10 ticks to allow all items to be processed (increased from 3)
-                if cleanupTicks >= 10 then
-                    if _craftingState[cleanupCharacterId] then
-                        print("ZItemTiers: [ISHandcraftAction] Cleaned up crafting state for character " .. cleanupCharacterId .. " after " .. cleanupTicks .. " ticks")
+                    
+                    -- Stop if we already found the item
+                    if foundItem then
+                        return false
+                    end
+                    
+                    -- Try to find items in inventory (check for up to 30 ticks)
+                    if cleanupTicks <= 30 and _craftingState[cleanupCharacterId] then
+                        local state = _craftingState[cleanupCharacterId]
+                        if state and state.character and state.character.getInventory then
+                            local inventory = state.character:getInventory()
+                            if inventory then
+                                local successGetItems, items = pcall(function()
+                                    if inventory.getItems then
+                                        return inventory:getItems()
+                                    end
+                                    return nil
+                                end)
+                                if successGetItems and items then
+                                    local preCraftItemIds = state.preCraftItemIds or {}
+                                    for i = 0, items:size() - 1 do
+                                        local item = items:get(i)
+                                        if item then
+                                            local successId, itemId = pcall(function()
+                                                if item.getID then
+                                                    return item:getID()
+                                                end
+                                                return nil
+                                            end)
+                                            
+                                            local modData = item:getModData()
+                                            if modData and not modData.craftedFromRarity and not ZItemTiers.IsItemBlacklisted(item) then
+                                                local currentRarity = modData.itemRarity
+                                                local isNewItem = false
+                                                if successId and itemId then
+                                                    isNewItem = not preCraftItemIds[itemId]
+                                                end
+                                                
+                                                -- Only apply to new items (not in pre-craft snapshot)
+                                                if isNewItem then
+                                                    local itemType = item:getFullType()
+                                                    local expectedOutputTypes = state.expectedOutputTypes or {}
+                                                    
+                                                    -- Check if this item matches expected output types (if we have them)
+                                                    local matchesExpected = true
+                                                    -- Check if expectedOutputTypes has any entries by counting them
+                                                    local hasEntries = false
+                                                    local count = 0
+                                                    for _ in pairs(expectedOutputTypes) do
+                                                        count = count + 1
+                                                        hasEntries = true
+                                                        break  -- Just need to know if it has entries
+                                                    end
+                                                    
+                                                    if hasEntries then
+                                                        matchesExpected = expectedOutputTypes[itemType] == true
+                                                        if not matchesExpected then
+                                                            print("ZItemTiers: [ISHandcraftAction] OnTick: New item " .. itemType .. " does not match expected output types")
+                                                        end
+                                                    end
+                                                    
+                                                    -- Apply rarity if item is new and matches expected output (or if we don't have expected outputs)
+                                                    if matchesExpected then
+                                                        print("ZItemTiers: [ISHandcraftAction] OnTick (tick " .. cleanupTicks .. "): Applying rarity " .. state.rarity .. " to new item: " .. itemType .. " (was: " .. tostring(currentRarity) .. ")")
+                                                        modData.itemRarity = state.rarity
+                                                        modData.craftedFromRarity = true
+                                                        if ZItemTiers and ZItemTiers.ApplyRarityBonuses then
+                                                            ZItemTiers.ApplyRarityBonuses(item, state.rarity)
+                                                        end
+                                                        foundItem = true
+                                                        _craftingState[cleanupCharacterId] = nil
+                                                        print("ZItemTiers: [ISHandcraftAction] OnTick: Cleaned up crafting state after finding item")
+                                                        return false
+                                                    end
+                                                end
+                                            end
+                                        end
+                                    end
+                                end
+                            end
+                        end
+                    end
+                    
+                    -- Clean up after 30 ticks if still active
+                    if cleanupTicks >= 30 then
+                        if _craftingState[cleanupCharacterId] then
+                            print("ZItemTiers: [ISHandcraftAction] Cleaned up crafting state for character " .. cleanupCharacterId .. " after " .. cleanupTicks .. " ticks (safety cleanup)")
                         _craftingState[cleanupCharacterId] = nil
                     end
                     return false  -- Remove this event handler
                 end
                 return true
             end)
+            end
         end
         
         return result
@@ -368,19 +685,37 @@ end
 
 -- Hook into Actions.addOrDropItem to catch crafted items
 -- This is called when items are added to inventory during crafting (both ISCraftAction and ISHandcraftAction)
-local originalAddOrDropItem = Actions.addOrDropItem
+if not Actions then
+    print("ZItemTiers: WARNING: Actions table does not exist!")
+end
+local originalAddOrDropItem = Actions and Actions.addOrDropItem or nil
 if originalAddOrDropItem then
+    print("ZItemTiers: Found Actions.addOrDropItem, setting up hook")
     function Actions.addOrDropItem(character, item)
         -- Check if there's an active crafting state for this character
+        local hasAnyCraftingState = false
+        for _ in pairs(_craftingState) do
+            hasAnyCraftingState = true
+            break
+        end
+        if hasAnyCraftingState then
+            print("ZItemTiers: [addOrDropItem] ENTRY - character: " .. tostring(character ~= nil) .. ", item: " .. tostring(item ~= nil))
+        end
+        
         if character and item then
             local characterId = nil
             local successId, id = pcall(function() 
                 if character.getOnlineID then
-                    return character:getOnlineID()
+                    local onlineId = character:getOnlineID()
+                    -- Normalize nil to 0 for single-player
+                    if onlineId == nil then
+                        return 0
+                    end
+                    return onlineId
                 end
-                return nil
+                return 0  -- Default to 0 for single-player
             end)
-            if successId and id then
+            if successId and id ~= nil then
                 characterId = id
             end
             
@@ -390,15 +725,47 @@ if originalAddOrDropItem then
                 itemType = typeValue
             end
             
-            -- Log all addOrDropItem calls during active crafting
-            if characterId and _craftingState[characterId] then
-                print("ZItemTiers: [addOrDropItem] Called for item: " .. tostring(itemType) .. " (character: " .. tostring(characterId) .. ")")
+            -- Log all addOrDropItem calls if there's any active crafting state
+            if hasAnyCraftingState then
+                print("ZItemTiers: [addOrDropItem] Called for item: " .. tostring(itemType) .. " (characterId: " .. tostring(characterId) .. ", hasState: " .. tostring(characterId and _craftingState[characterId] ~= nil) .. ")")
+                -- Also log all active state IDs for debugging
+                local stateIds = {}
+                for id, _ in pairs(_craftingState) do
+                    table.insert(stateIds, tostring(id))
+                end
+                print("ZItemTiers: [addOrDropItem] Active crafting state IDs: " .. table.concat(stateIds, ", "))
+                -- Also try to get character ID via different methods
+                local altId = nil
+                local successAlt, altIdValue = pcall(function()
+                    if character.getPlayerNum then
+                        return character:getPlayerNum()
+                    end
+                    return nil
+                end)
+                if successAlt and altIdValue then
+                    altId = altIdValue
+                end
+                print("ZItemTiers: [addOrDropItem] Character alt ID (getPlayerNum): " .. tostring(altId))
             end
             
             -- Check if this item is being added during crafting
+            -- Try to match by character ID first, then by character object
+            local matchedState = nil
             if characterId and _craftingState[characterId] then
-                local state = _craftingState[characterId]
-                if state and state.rarity then
+                matchedState = _craftingState[characterId]
+            else
+                -- Fallback: match by character object
+                for id, state in pairs(_craftingState) do
+                    if state and state.character == character then
+                        matchedState = state
+                        characterId = id
+                        print("ZItemTiers: [addOrDropItem] Matched crafting state by character object (id: " .. tostring(id) .. ")")
+                        break
+                    end
+                end
+            end
+            
+            if matchedState and matchedState.rarity then
                     -- Check if item is blacklisted
                     if not ZItemTiers.IsItemBlacklisted(item) then
                         -- Check if item already has rarity (might have been set by RecipeManager.PerformMakeItem)
@@ -406,19 +773,37 @@ if originalAddOrDropItem then
                         if modData then
                             local currentRarity = modData.itemRarity
                             local isCrafted = modData.craftedFromRarity == true
+                        
+                        -- Check if we're unbundling (check consumed items for bundles with stored rarities)
+                        local rarityToApply = matchedState.rarity
+                        local unbundleRarityIndex = matchedState._unbundleRarityIndex or 0
+                        
+                        if matchedState.consumedRarities and #matchedState.consumedRarities > 0 then
+                            -- We have stored rarities from consumed items (unbundling scenario)
+                            unbundleRarityIndex = unbundleRarityIndex + 1
+                            if unbundleRarityIndex <= #matchedState.consumedRarities then
+                                rarityToApply = matchedState.consumedRarities[unbundleRarityIndex]
+                                matchedState._unbundleRarityIndex = unbundleRarityIndex
+                                print("ZItemTiers: [addOrDropItem] Unbundling: Using stored rarity " .. rarityToApply .. " (index " .. unbundleRarityIndex .. "/" .. #matchedState.consumedRarities .. ")")
+                            else
+                                -- Ran out of stored rarities - default to the overall calculated rarity
+                                rarityToApply = matchedState.rarity
+                                print("ZItemTiers: [addOrDropItem] Unbundling: Ran out of stored rarities, falling back to overall rarity: " .. rarityToApply .. " (index " .. unbundleRarityIndex .. " > " .. #matchedState.consumedRarities .. ")")
+                            end
+                        end
                             
                             -- Apply rarity if item doesn't have it yet, or if it's Common (spawn_hooks might have set it)
                             if not currentRarity or (currentRarity == "Common" and not isCrafted) then
-                                print("ZItemTiers: [addOrDropItem] Applying rarity " .. state.rarity .. " to crafted item: " .. tostring(itemType) .. " (was: " .. tostring(currentRarity) .. ")")
-                                modData.itemRarity = state.rarity
+                            print("ZItemTiers: [addOrDropItem] Applying rarity " .. rarityToApply .. " to crafted item: " .. tostring(itemType) .. " (was: " .. tostring(currentRarity) .. ")")
+                            modData.itemRarity = rarityToApply
                                 modData.craftedFromRarity = true
                                 
                                 -- Apply the calculated rarity bonuses
                                 if ZItemTiers and ZItemTiers.ApplyRarityBonuses then
-                                    ZItemTiers.ApplyRarityBonuses(item, state.rarity)
+                                ZItemTiers.ApplyRarityBonuses(item, rarityToApply)
                                 end
                                 
-                                print("ZItemTiers: [addOrDropItem] Applied rarity " .. state.rarity .. " to crafted item: " .. tostring(itemType))
+                            print("ZItemTiers: [addOrDropItem] Applied rarity " .. rarityToApply .. " to crafted item: " .. tostring(itemType))
                             else
                                 print("ZItemTiers: [addOrDropItem] Item already has rarity: " .. tostring(currentRarity) .. " (skipping)")
                             end
@@ -428,9 +813,8 @@ if originalAddOrDropItem then
                     else
                         print("ZItemTiers: [addOrDropItem] Item is blacklisted: " .. tostring(itemType))
                     end
-                else
-                    print("ZItemTiers: [addOrDropItem] WARNING: Crafting state exists but no rarity (state: " .. tostring(state) .. ")")
-                end
+            elseif matchedState then
+                print("ZItemTiers: [addOrDropItem] WARNING: Crafting state exists but no rarity (state: " .. tostring(matchedState) .. ")")
             end
         end
         
@@ -447,6 +831,16 @@ end
 -- This fires when items are added to containers (including player inventory)
 local function onContainerUpdateForCrafting(container)
     if not container then return end
+    
+    -- Log if there are any active crafting states
+    local hasActiveCrafting = false
+    for _ in pairs(_craftingState) do
+        hasActiveCrafting = true
+        break
+    end
+    if hasActiveCrafting then
+        print("ZItemTiers: [OnContainerUpdate] Called (hasActiveCrafting: true)")
+    end
     
     -- Check all active crafting states and see if any match this container
     for characterId, state in pairs(_craftingState) do

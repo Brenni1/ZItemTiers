@@ -22,6 +22,7 @@ function ZItemTiers.GetItemBonuses(item)
     ZItemTiers.AddContainerBonuses(bonusList, item, bonuses)
     ZItemTiers.AddDrainableBonus(bonusList, item, bonuses)
     ZItemTiers.AddVisionImpairmentBonus(bonusList, item, bonuses)
+    ZItemTiers.AddHearingImpairmentBonus(bonusList, item, bonuses)
     ZItemTiers.AddMoodBonus(bonusList, item, bonuses)
     ZItemTiers.AddReadingSpeedBonus(bonusList, item, bonuses)
     ZItemTiers.AddVhsSkillXpBonus(bonusList, item, bonuses)
@@ -279,6 +280,47 @@ function ZItemTiers.AddVisionImpairmentBonus(bonusList, item, bonuses)
             type = "VisionImpairmentReduction",
             value = visionImpairValue,
             displayName = "Vision Impairment Reduction"
+        })
+    end
+end
+
+-- Add hearing impairment reduction bonus
+function ZItemTiers.AddHearingImpairmentBonus(bonusList, item, bonuses)
+    local isClothingWithHearingImpair = false
+    local successClothing, resultClothing = pcall(function()
+        return instanceof(item, "Clothing")
+    end)
+    if successClothing and resultClothing then
+        -- Check if item has hearing impairment (hearing modifier < 1.0)
+        local successGetBase, baseValue = pcall(function()
+            if item.getScriptItem then
+                local scriptItem = item:getScriptItem()
+                if scriptItem then
+                    if scriptItem.getHearingModifier then
+                        return scriptItem:getHearingModifier()
+                    end
+                    if scriptItem.hearingModifier then
+                        return scriptItem.hearingModifier
+                    end
+                end
+            end
+            -- Also try instance method
+            if item.getHearingModifier then
+                return item:getHearingModifier()
+            end
+            return 1.0
+        end)
+        if successGetBase and baseValue and baseValue < 1.0 then
+            isClothingWithHearingImpair = true
+        end
+    end
+    
+    if bonuses.hearingImpairmentReduction and isClothingWithHearingImpair then
+        local hearingImpairValue = string.format("%.2f", bonuses.hearingImpairmentReduction)
+        table.insert(bonusList, {
+            type = "HearingImpairmentReduction",
+            value = hearingImpairValue,
+            displayName = "Hearing Impairment Reduction"
         })
     end
 end

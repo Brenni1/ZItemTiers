@@ -17,7 +17,12 @@ require "ZItemTiers/capacity_bonus"
 require "ZItemTiers/max_encumbrance_bonus"
 require "ZItemTiers/drainable_capacity"
 require "ZItemTiers/vision_impairment"
+require "ZItemTiers/hearing_impairment"
 require "ZItemTiers/damage_multiplier"
+require "ZItemTiers/hunger_reduction"
+require "ZItemTiers/battery_consumption"
+require "ZItemTiers/washing"
+require "ZItemTiers/moveable_break_chance"
 
 -- Apply rarities after distributions are merged
 local function applyLootRarities()

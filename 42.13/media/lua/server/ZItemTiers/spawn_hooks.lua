@@ -37,6 +37,14 @@ local function applyRarityToItem(item, forceReapply)
         return
     end
     
+    -- Skip VHS items that are being restored from ejection (to prevent overriding restored rarity)
+    if modData._vhsRestored or modData._vhsRestoring then
+        if itemType and string.find(itemType, "VHS") then
+            print("ZItemTiers: [VHS] Skipping " .. itemType .. " - VHS being restored from ejection")
+        end
+        return
+    end
+    
     -- Check if this is a VHS item for logging
     local isVHS = false
     if itemType and string.find(itemType, "VHS") then
@@ -127,13 +135,37 @@ end
 local function onFillContainer(roomName, containerType, itemContainer)
     if not itemContainer then return end
     
-    local items = itemContainer:getItems()
-    if not items then return end
+    -- Safely get items from container (some container types don't have getItems())
+    -- ItemPickerContainer doesn't support getItems(), so we need to catch the error
+    local success, items = pcall(function()
+        -- Try to call getItems() - will fail for ItemPickerContainer
+        return itemContainer:getItems()
+    end)
+    
+    -- If getItems() failed or returned nil, this container type doesn't support it
+    if not success or not items then return end
     
     -- Process all items in the container
-    for i = 0, items:size() - 1 do
-        local item = items:get(i)
-        applyRarityToItem(item)
+    local successSize, size = pcall(function()
+        if items.size then
+            return items:size()
+        end
+        return 0
+    end)
+    
+    if not successSize or not size or size == 0 then return end
+    
+    for i = 0, size - 1 do
+        local successGet, item = pcall(function()
+            if items.get then
+                return items:get(i)
+            end
+            return nil
+        end)
+        
+        if successGet and item then
+            applyRarityToItem(item)
+        end
     end
 end
 

@@ -51,7 +51,7 @@ local function addRarityToLayout(item, layout)
             if bonus.value and layout and layout.addItem then
                 -- Format bonus text based on bonus type
                 local bonusText = ""
-                if bonus.type == "RunSpeedModifier" or bonus.type == "VisionImpairmentReduction" then
+                if bonus.type == "RunSpeedModifier" or bonus.type == "VisionImpairmentReduction" or bonus.type == "HearingImpairmentReduction" then
                     -- These are already formatted with decimal places (e.g., "0.1")
                     bonusText = "+" .. bonus.value .. " " .. bonusName
                         elseif bonus.type == "EncumbranceReduction" or bonus.type == "MaxEncumbranceBonus" or bonus.type == "BiteDefenseBonus" or bonus.type == "ScratchDefenseBonus" or bonus.type == "VhsSkillXpBonus" then

@@ -90,9 +90,11 @@ ZItemTiers.RarityBonuses = {
         maxEncumbranceBonus = 0.1,  -- +0.1 maximum item encumbrance (for InventoryContainer)
         drainableCapacityBonus = 10,  -- +10% capacity (for Drainable items)
         visionImpairmentReduction = 0.05,  -- -0.05 vision impairment (for Clothing with vision impairment)
+        hearingImpairmentReduction = 0.05,  -- -0.05 hearing impairment (for Clothing with hearing impairment)
         moodBonus = 0.1,  -- +10% mood benefits (boredom/unhappiness/stress reduction) for Literature items
         readingSpeedBonus = 0.1,  -- +10% reading speed (reduces reading time) for Literature items
         vhsSkillXpBonus = 50,  -- +50 skill XP (total per cassette) for VHS tapes
+        batteryConsumptionReduction = 0.1,  -- 10% less battery consumption (for ElectricLight/Torch flashlights)
     },
     Rare = {
         weightReduction = 20,  -- 20% weight reduction (for item's own weight)
@@ -105,9 +107,11 @@ ZItemTiers.RarityBonuses = {
         maxEncumbranceBonus = 0.2,  -- +0.2 maximum item encumbrance (for InventoryContainer)
         drainableCapacityBonus = 20,  -- +20% capacity (for Drainable items)
         visionImpairmentReduction = 0.10,  -- -0.10 vision impairment (for Clothing with vision impairment)
+        hearingImpairmentReduction = 0.10,  -- -0.10 hearing impairment (for Clothing with hearing impairment)
         moodBonus = 0.2,  -- +20% mood benefits (boredom/unhappiness/stress reduction) for Literature items
         readingSpeedBonus = 0.2,  -- +20% reading speed (reduces reading time) for Literature items
         vhsSkillXpBonus = 100,  -- +100 skill XP (total per cassette) for VHS tapes
+        batteryConsumptionReduction = 0.2,  -- 20% less battery consumption (for ElectricLight/Torch flashlights)
     },
     Epic = {
         weightReduction = 30,  -- 30% weight reduction (for item's own weight)
@@ -120,9 +124,11 @@ ZItemTiers.RarityBonuses = {
         maxEncumbranceBonus = 0.3,  -- +0.3 maximum item encumbrance (for InventoryContainer)
         drainableCapacityBonus = 30,  -- +30% capacity (for Drainable items)
         visionImpairmentReduction = 0.15,  -- -0.15 vision impairment (for Clothing with vision impairment)
+        hearingImpairmentReduction = 0.15,  -- -0.15 hearing impairment (for Clothing with hearing impairment)
         moodBonus = 0.3,  -- +30% mood benefits (boredom/unhappiness/stress reduction) for Literature items
         readingSpeedBonus = 0.3,  -- +30% reading speed (reduces reading time) for Literature items
         vhsSkillXpBonus = 150,  -- +150 skill XP (total per cassette) for VHS tapes
+        batteryConsumptionReduction = 0.3,  -- 30% less battery consumption (for ElectricLight/Torch flashlights)
     },
     Legendary = {
         weightReduction = 50,  -- 50% weight reduction (for item's own weight)
@@ -135,6 +141,8 @@ ZItemTiers.RarityBonuses = {
         maxEncumbranceBonus = 0.5, -- +0.5 maximum item encumbrance (for InventoryContainer)
         drainableCapacityBonus = 50,  -- +50% capacity (for Drainable items)
         visionImpairmentReduction = 0.25,  -- -0.25 vision impairment (for Clothing with vision impairment)
+        hearingImpairmentReduction = 0.25,  -- -0.25 hearing impairment (for Clothing with hearing impairment)
+        batteryConsumptionReduction = 0.5,  -- 50% less battery consumption (for ElectricLight/Torch flashlights)
         moodBonus = 0.5,  -- +50% mood benefits (boredom/unhappiness/stress reduction) for Literature items
         readingSpeedBonus = 0.5,  -- +50% reading speed (reduces reading time) for Literature items
         vhsSkillXpBonus = 250,  -- +250 skill XP (total per cassette) for VHS tapes
@@ -318,6 +326,10 @@ function ZItemTiers.ApplyRarityBonuses(item, rarity)
     if bonuses.visionImpairmentReduction then
         modData.itemVisionImpairmentReduction = bonuses.visionImpairmentReduction
     end
+    -- Store hearing impairment reduction so we can re-apply it if it gets reset
+    if bonuses.hearingImpairmentReduction then
+        modData.itemHearingImpairmentReduction = bonuses.hearingImpairmentReduction
+    end
     
     -- Special handling for HandWeapon items
     local isHandWeapon = false
@@ -433,6 +445,13 @@ function ZItemTiers.ApplyRarityBonuses(item, rarity)
         end
     end
     
+    -- Apply hearing impairment reduction (for Clothing items with hearing impairment)
+    if bonuses.hearingImpairmentReduction then
+        if ZItemTiers.ApplyHearingImpairmentReduction then
+            ZItemTiers.ApplyHearingImpairmentReduction(item, bonuses.hearingImpairmentReduction, modData)
+        end
+    end
+    
     -- Apply damage multiplier (for HandWeapon items - stored in modData, applied via Java patch)
     if bonuses.damageMultiplier and isHandWeapon then
         if ZItemTiers.ApplyDamageMultiplier then
@@ -495,6 +514,121 @@ function ZItemTiers.ApplyRarityBonuses(item, rarity)
         end
     end
     
+    -- Apply battery consumption reduction (for ElectricLight/Torch flashlights)
+    if bonuses.batteryConsumptionReduction then
+        if ZItemTiers.ApplyBatteryConsumptionReduction then
+            ZItemTiers.ApplyBatteryConsumptionReduction(item, bonuses.batteryConsumptionReduction, modData)
+        end
+    end
+    
+    -- Apply hunger reduction bonus (for Food items that reduce hunger)
+    local isFood = false
+    local successFood, resultFood = pcall(function()
+        return instanceof(item, "Food")
+    end)
+    if successFood and resultFood then
+        isFood = true
+    end
+    
+    if isFood then
+        -- Get current hunger values for debugging
+        local successGetBase, baseHunger = pcall(function()
+            if item.getBaseHunger then
+                return item:getBaseHunger()
+            end
+            return nil
+        end)
+        local successGetHungChange, currentHungChange = pcall(function()
+            if item.getHungChange then
+                return item:getHungChange()
+            end
+            return nil
+        end)
+        
+        -- Get the original hunger change value from script item (this is the true base value)
+        local originalHungChange = nil
+        local successGetScript, scriptItem = pcall(function()
+            if item.getScriptItem then
+                return item:getScriptItem()
+            end
+            return nil
+        end)
+        
+        if successGetScript and scriptItem then
+            -- Script item stores hungerChange as integer (e.g., -10 for -0.1)
+            if scriptItem.HungerChange then
+                originalHungChange = scriptItem.HungerChange / 100.0
+            elseif scriptItem.hungerChange then
+                originalHungChange = scriptItem.hungerChange / 100.0
+            end
+        end
+        
+        -- If we couldn't get from script item, try getBaseHunger (but it might be modified)
+        if not originalHungChange then
+            if successGetBase and baseHunger and baseHunger ~= 0.0 then
+                originalHungChange = baseHunger
+            elseif successGetHungChange and currentHungChange then
+                originalHungChange = currentHungChange
+            end
+        end
+        
+        -- Only apply bonus if hunger change is negative (reduces hunger) and we got the original from script item
+        if originalHungChange and originalHungChange < 0.0 and successGetScript and scriptItem then
+            local tierIndex = rarityData.index
+            local multiplier = 1.0 + (tierIndex - 1) * 0.2
+            
+            -- Always use script item value as the true base (update stored value if different)
+            if modData then
+                modData.itemHungerChangeOriginal = originalHungChange
+            end
+            
+            -- Calculate expected modified value
+            local expectedModified = originalHungChange * multiplier
+            
+            -- Check if bonus was already applied correctly
+            local needsUpdate = true
+            if modData and modData.itemHungerReductionMultiplier then
+                if successGetHungChange and currentHungChange and math.abs(currentHungChange - expectedModified) < 0.001 then
+                    -- Already applied correctly, skip
+                    needsUpdate = false
+                end
+            end
+            
+            if needsUpdate then
+                -- Apply the modified hunger change to both hungChange and baseHunger
+                local successSet = pcall(function()
+                    if item.setHungChange then
+                        item:setHungChange(expectedModified)
+                    end
+                    if item.setBaseHunger then
+                        item:setBaseHunger(expectedModified)
+                    end
+                end)
+                
+                if successSet then
+                    -- Store the multiplier in modData to mark bonus as applied
+                    if modData then
+                        modData.itemHungerReductionMultiplier = multiplier
+                    end
+                    
+                    -- Verify the value was set
+                    local verifyHungChange = nil
+                    local verifyBaseHunger = nil
+                    local successVerify = pcall(function()
+                        if item.getHungChange then
+                            verifyHungChange = item:getHungChange()
+                        end
+                        if item.getBaseHunger then
+                            verifyBaseHunger = item:getBaseHunger()
+                        end
+                    end)
+                    
+                    print("ZItemTiers: Applied hunger reduction multiplier " .. multiplier .. "x to Food: " .. tostring(item:getFullType()) .. " (base: " .. tostring(originalHungChange) .. ", current: " .. tostring(successGetHungChange and currentHungChange or "nil") .. ", new: " .. tostring(expectedModified) .. ", verify: " .. tostring(verifyHungChange) .. ", verifyBase: " .. tostring(verifyBaseHunger) .. ")")
+                end
+            end
+        end
+    end
+    
     -- Mark bonuses as applied to prevent multiple applications
     -- Use the global session ID initialized once per game session
     if modData then
@@ -534,6 +668,7 @@ function ZItemTiers.GetBonusDisplayName(bonusType)
         CapacityBonus = "Capacity",
         DrainableCapacityBonus = "Liquid Capacity",
         VisionImpairmentReduction = "Vision Impairment Reduction",
+        HearingImpairmentReduction = "Hearing Impairment Reduction",
         MoodBonus = "Mood Benefits",
         ReadingSpeedBonus = "Reading Speed",
         VhsSkillXpBonus = "Skill XP Bonus",

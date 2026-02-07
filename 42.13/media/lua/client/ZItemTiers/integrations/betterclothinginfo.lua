@@ -125,7 +125,7 @@ if hasBetterClothingInfo and _G and _G.DoTooltipClothing and DrawItem and SetIte
                             -- Format bonus text (e.g., "+20% Damage")
                             local bonusText = ""
                             -- Format based on bonus type
-                            if bonus.type == "RunSpeedModifier" or bonus.type == "VisionImpairmentReduction" then
+                            if bonus.type == "RunSpeedModifier" or bonus.type == "VisionImpairmentReduction" or bonus.type == "HearingImpairmentReduction" then
                                 -- These are already formatted with decimal places (e.g., "0.1")
                                 bonusText = "+" .. bonus.value .. " " .. bonusName
                             elseif bonus.type == "EncumbranceReduction" or bonus.type == "MaxEncumbranceBonus" or bonus.type == "BiteDefenseBonus" or bonus.type == "ScratchDefenseBonus" or bonus.type == "VhsSkillXpBonus" then

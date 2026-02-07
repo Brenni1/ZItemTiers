@@ -25,17 +25,11 @@ public class Patch_InventoryContainer {
                 Object bonusObj = modData.rawget("itemMaxEncumbranceBonus");
                 if (bonusObj != null) {
                     float bonus = ((Number) bonusObj).floatValue();
-                    System.out.println("ZItemTiers [Java]: Found maxEncumbranceBonus=" + bonus);
                     return bonus;
-                } else {
-                    System.out.println("ZItemTiers [Java]: No itemMaxEncumbranceBonus found in modData");
                 }
-            } else {
-                System.out.println("ZItemTiers [Java]: modData is not a KahluaTable: " + (modDataObj != null ? modDataObj.getClass().getName() : "null"));
             }
         } catch (Exception e) {
-            System.out.println("ZItemTiers [Java]: Exception getting maxEncumbranceBonus: " + e.getMessage());
-            e.printStackTrace();
+            // Silently ignore exceptions
         }
         return 0.0f;
     }
@@ -50,14 +44,10 @@ public class Patch_InventoryContainer {
         public static void onExit(@Patch.This InventoryContainer self, @Patch.Return(readOnly = false) float returnValue) {
             // Only apply bonus if maxItemSize > 0 (some containers don't have this restriction)
             if (returnValue > 0.0f) {
-                float originalValue = returnValue;
                 // Apply rarity-based max encumbrance bonus (flat additive)
                 float bonus = getMaxEncumbranceBonus(self);
                 if (bonus > 0.0f) {
                     returnValue = returnValue + bonus;
-                    System.out.println("ZItemTiers [Java]: Applied maxEncumbranceBonus: " + originalValue + " + " + bonus + " = " + returnValue);
-                } else {
-                    System.out.println("ZItemTiers [Java]: No bonus applied (bonus=" + bonus + ")");
                 }
             }
         }
