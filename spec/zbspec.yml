@@ -1,0 +1,9 @@
+---
+# ZBSpec configuration for ItemLootTiers
+
+# Stop game after specs complete
+auto_shutdown: false
+
+# Your mod(s) to spec (ZombieBuddy and ZBSpec are automatically included)
+mods:
+  - ItemLootTiers
