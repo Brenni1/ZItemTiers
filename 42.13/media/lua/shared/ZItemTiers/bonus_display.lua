@@ -86,17 +86,10 @@ function ZItemTiers.AddRunSpeedBonus(bonusList, item, bonuses)
         return instanceof(item, "Clothing")
     end)
     if successClothing and resultClothing then
-        -- Check if item has a non-default run speed modifier
-        local successGetBase, baseValue = pcall(function()
-            if item.getScriptItem then
-                local scriptItem = item:getScriptItem()
-                if scriptItem and scriptItem.runSpeedModifier then
-                    return scriptItem.runSpeedModifier
-                end
-            end
-            return 1.0
-        end)
-        if successGetBase and baseValue and math.abs(baseValue - 1.0) > 0.001 then
+        -- Check if item has a non-default run speed modifier using shared helper
+        local modData = item:getModData()
+        local baseValue = ZItemTiers.GetBaseRunSpeedModifier(item, modData)
+        if math.abs(baseValue - 1.0) > 0.001 then
             isClothingWithRunSpeed = true
         end
     end

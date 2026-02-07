@@ -279,25 +279,8 @@ local function reapplyBonusesIfNeeded(item)
             end
             
             if isClothing then
-                -- Get base run speed modifier
-                local baseRunSpeedMod = modData.itemRunSpeedModifierBase or 1.0
-                if not modData.itemRunSpeedModifierBase then
-                    -- Try to get from script item
-                    local successGetBase, baseValue = pcall(function()
-                        if item.getScriptItem then
-                            local scriptItem = item:getScriptItem()
-                            if scriptItem and scriptItem.runSpeedModifier then
-                                return scriptItem.runSpeedModifier
-                            end
-                        end
-                        return 1.0
-                    end)
-                    if successGetBase and baseValue then
-                        baseRunSpeedMod = baseValue
-                        -- Store it for future checks
-                        modData.itemRunSpeedModifierBase = baseValue
-                    end
-                end
+                -- Get base run speed modifier using shared helper
+                local baseRunSpeedMod = ZItemTiers.GetBaseRunSpeedModifier(item, modData)
                 
                 -- Check if item has a non-default run speed modifier
                 if math.abs(baseRunSpeedMod - 1.0) > 0.001 then

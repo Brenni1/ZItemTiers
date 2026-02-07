@@ -205,6 +205,58 @@ function ZItemTiers.IsItemBlacklisted(item)
     return false
 end
 
+-- Get the base (unmodified) run speed modifier for a Clothing item
+-- Tries: script item getter -> script item field -> stored modData -> instance method
+-- Returns 1.0 (neutral) if item has no run speed modifier
+function ZItemTiers.GetBaseRunSpeedModifier(item, modData)
+    -- Trust stored base only if from current session (prevents using stale 1.0 from old buggy code)
+    if modData and modData.itemRunSpeedModifierBase
+        and modData._bonusesApplied == ZItemTiers._bonusesAppliedSessionId then
+        return modData.itemRunSpeedModifierBase
+    end
+
+    local base = 1.0
+
+    -- Primary: script item getter (authoritative, always returns the vanilla base)
+    local success, value = pcall(function()
+        if item.getScriptItem then
+            local scriptItem = item:getScriptItem()
+            if scriptItem then
+                if scriptItem.getRunSpeedModifier then
+                    return scriptItem:getRunSpeedModifier()
+                end
+                if scriptItem.runSpeedModifier then
+                    return scriptItem.runSpeedModifier
+                end
+            end
+        end
+        return nil
+    end)
+    if success and value then
+        base = value
+    end
+
+    -- Fallback: instance method (correct on first application before any modifications)
+    if math.abs(base - 1.0) <= 0.001 then
+        local successGet, instValue = pcall(function()
+            if item.getRunSpeedModifier then
+                return item:getRunSpeedModifier()
+            end
+            return 1.0
+        end)
+        if successGet and instValue then
+            base = instValue
+        end
+    end
+
+    -- Cache in modData for future calls
+    if modData then
+        modData.itemRunSpeedModifierBase = base
+    end
+
+    return base
+end
+
 -- Apply fixed rarity-based bonuses to an item
 function ZItemTiers.ApplyRarityBonuses(item, rarity)
     if not item then return end
@@ -286,21 +338,8 @@ function ZItemTiers.ApplyRarityBonuses(item, rarity)
     -- Store the run speed modifier bonus and base value so we can re-apply it if it gets reset
     if bonuses.runSpeedModifier then
         modData.itemRunSpeedModifierBonus = bonuses.runSpeedModifier
-        -- Also store the base value for verification
-        local successGetBase, baseValue = pcall(function()
-            if item.getScriptItem then
-                local scriptItem = item:getScriptItem()
-                if scriptItem and scriptItem.runSpeedModifier then
-                    return scriptItem.runSpeedModifier
-                end
-            end
-            return 1.0
-        end)
-        if successGetBase and baseValue then
-            modData.itemRunSpeedModifierBase = baseValue
-        else
-            modData.itemRunSpeedModifierBase = 1.0
-        end
+        -- Store base value using the shared helper (tries getter, field, instance)
+        ZItemTiers.GetBaseRunSpeedModifier(item, modData)
     end
     -- Store capacity bonus so we can re-apply it if it gets reset
     if bonuses.capacityBonus then
@@ -630,11 +669,9 @@ function ZItemTiers.ApplyRarityBonuses(item, rarity)
     end
     
     -- Mark bonuses as applied to prevent multiple applications
-    -- Use the global session ID initialized once per game session
+    -- Always update to current session ID (not just when nil) so session-based caching works after save/load
     if modData then
-        if not modData._bonusesApplied then
-            modData._bonusesApplied = ZItemTiers._bonusesAppliedSessionId
-        end
+        modData._bonusesApplied = ZItemTiers._bonusesAppliedSessionId
     end
     
     -- Future bonuses can be added here following the same pattern

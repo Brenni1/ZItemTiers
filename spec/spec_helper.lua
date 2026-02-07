@@ -10,12 +10,23 @@ function get_player()
     end
 end
 
--- Create a container item (InventoryContainer) by full type
-function create_container(fullType)
+-- Create an item by full type, with an optional instanceof check
+function create_item(fullType, expectedClass)
     local item = instanceItem(fullType)
     assert(item, "Failed to create item: " .. fullType)
-    assert(instanceof(item, "InventoryContainer"), fullType .. " is not an InventoryContainer")
+    if expectedClass then
+        assert(instanceof(item, expectedClass), fullType .. " is not an " .. expectedClass)
+    end
     return item
+end
+
+-- Convenience wrappers
+function create_container(fullType)
+    return create_item(fullType, "InventoryContainer")
+end
+
+function create_clothing(fullType)
+    return create_item(fullType, "Clothing")
 end
 
 -- Get the base capacity from script item for a container
@@ -25,6 +36,11 @@ function get_script_capacity(item)
         return scriptItem:getCapacity()
     end
     return item:getCapacity()
+end
+
+-- Get the base run speed modifier for a clothing item
+function get_base_run_speed(item)
+    return ZItemTiers.GetBaseRunSpeedModifier(item, item:getModData())
 end
 
 -- Apply a rarity to an item and return it
