@@ -25,8 +25,8 @@ function ZItemTiers.GetItemBonuses(item)
     ZItemTiers.AddHearingImpairmentBonus(bonusList, item, bonuses)
     ZItemTiers.AddMoodBonus(bonusList, item, bonuses)
     ZItemTiers.AddReadingSpeedBonus(bonusList, item, bonuses)
-    ZItemTiers.AddVhsSkillXpBonus(bonusList, item, bonuses)
-    
+    -- ZItemTiers.AddVhsSkillXpBonus(bonusList, item, bonuses)  -- VHS bonuses commented out; VHS blacklisted for now
+
     return bonusList
 end
 

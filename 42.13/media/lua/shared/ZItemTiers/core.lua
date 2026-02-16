@@ -25,6 +25,7 @@ ZItemTiers.BlacklistedItems = {
     -- Maps (maps are informational items, no benefit from rarity)
     ["Base.Map"] = true,
     ["Base.GolfTee"] = true,
+    -- VHS tapes (blacklisted by pattern in IsItemBlacklisted; bonus commented out for now)
 }
 
 -- Rarity probabilities: [Common, Uncommon, Rare, Epic, Legendary]
@@ -93,7 +94,7 @@ ZItemTiers.RarityBonuses = {
         hearingImpairmentReduction = 0.05,  -- -0.05 hearing impairment (for Clothing with hearing impairment)
         moodBonus = 0.1,  -- +10% mood benefits (boredom/unhappiness/stress reduction) for Literature items
         readingSpeedBonus = 0.1,  -- +10% reading speed (reduces reading time) for Literature items
-        vhsSkillXpBonus = 50,  -- +50 skill XP (total per cassette) for VHS tapes
+        -- vhsSkillXpBonus = 50,  -- +50 skill XP (total per cassette) for VHS tapes (commented out; VHS blacklisted for now)
         batteryConsumptionReduction = 0.1,  -- 10% less battery consumption (for ElectricLight/Torch flashlights)
     },
     Rare = {
@@ -110,7 +111,7 @@ ZItemTiers.RarityBonuses = {
         hearingImpairmentReduction = 0.10,  -- -0.10 hearing impairment (for Clothing with hearing impairment)
         moodBonus = 0.2,  -- +20% mood benefits (boredom/unhappiness/stress reduction) for Literature items
         readingSpeedBonus = 0.2,  -- +20% reading speed (reduces reading time) for Literature items
-        vhsSkillXpBonus = 100,  -- +100 skill XP (total per cassette) for VHS tapes
+        -- vhsSkillXpBonus = 100,  -- +100 skill XP (total per cassette) for VHS tapes (commented out; VHS blacklisted for now)
         batteryConsumptionReduction = 0.2,  -- 20% less battery consumption (for ElectricLight/Torch flashlights)
     },
     Epic = {
@@ -127,7 +128,7 @@ ZItemTiers.RarityBonuses = {
         hearingImpairmentReduction = 0.15,  -- -0.15 hearing impairment (for Clothing with hearing impairment)
         moodBonus = 0.3,  -- +30% mood benefits (boredom/unhappiness/stress reduction) for Literature items
         readingSpeedBonus = 0.3,  -- +30% reading speed (reduces reading time) for Literature items
-        vhsSkillXpBonus = 150,  -- +150 skill XP (total per cassette) for VHS tapes
+        -- vhsSkillXpBonus = 150,  -- +150 skill XP (total per cassette) for VHS tapes (commented out; VHS blacklisted for now)
         batteryConsumptionReduction = 0.3,  -- 30% less battery consumption (for ElectricLight/Torch flashlights)
     },
     Legendary = {
@@ -145,7 +146,7 @@ ZItemTiers.RarityBonuses = {
         batteryConsumptionReduction = 0.5,  -- 50% less battery consumption (for ElectricLight/Torch flashlights)
         moodBonus = 0.5,  -- +50% mood benefits (boredom/unhappiness/stress reduction) for Literature items
         readingSpeedBonus = 0.5,  -- +50% reading speed (reduces reading time) for Literature items
-        vhsSkillXpBonus = 250,  -- +250 skill XP (total per cassette) for VHS tapes
+        -- vhsSkillXpBonus = 250,  -- +250 skill XP (total per cassette) for VHS tapes (commented out; VHS blacklisted for now)
     },
 }
 
@@ -182,7 +183,11 @@ function ZItemTiers.IsItemBlacklisted(item)
     if successType and fullType and ZItemTiers.BlacklistedItems[fullType] then
         return true
     end
-    
+    -- VHS tapes: blacklist by pattern (any fullType containing "VHS")
+    if successType and fullType and string.find(fullType, "VHS") then
+        return true
+    end
+
     -- Check if item is a Map type (all maps should be blacklisted)
     local itemType = item:getType()
     if itemType then
@@ -533,26 +538,21 @@ function ZItemTiers.ApplyRarityBonuses(item, rarity)
         end
     end
     
-    -- Store VHS skill XP bonus in modData (only for VHS tapes)
+    -- Store VHS skill XP bonus in modData (only for VHS tapes) -- commented out; VHS blacklisted for now
+    --[[
     if bonuses.vhsSkillXpBonus then
-        -- Check if it's a VHS tape by type name (VHS items are ComboItem, not Literature)
         local isVHS = false
         local itemType = item:getType()
-        if itemType then
-            -- VHS tapes have "VHS" in their type
-            if string.find(itemType, "VHS") then
-                isVHS = true
-            end
+        if itemType and string.find(itemType, "VHS") then
+            isVHS = true
         end
-        
-        -- Only apply VHS skill XP bonus to VHS tapes
         if isVHS and modData then
             print("ZItemTiers: [VHS] Applying skill XP bonus to: " .. itemType .. ", rarity: " .. rarity .. ", bonus: " .. tostring(bonuses.vhsSkillXpBonus))
             modData.itemVhsSkillXpBonus = bonuses.vhsSkillXpBonus
-            -- Bonus XP will be applied when VHS finishes playing (via OnDeviceText hook)
         end
     end
-    
+    ]]
+
     -- Apply battery consumption reduction (for ElectricLight/Torch flashlights)
     if bonuses.batteryConsumptionReduction then
         if ZItemTiers.ApplyBatteryConsumptionReduction then
