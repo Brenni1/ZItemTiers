@@ -1,0 +1,30 @@
+[h1]Zed's Item Tiers[/h1]
+Tired of the same loot everywhere and losing the thrill of exploration? [b]Zed's Item Tiers[/b] adds a [b]probability-based rarity system[/b]: any item can spawn as Common, Uncommon, Rare, Epic, or Legendary. Higher tiers grant real stat bonuses—lighter bags, deadlier weapons, tougher gear—so that next find might actually matter.
+
+[h2]Rarities[/h2]
+[list]
+[*][b]Common[/b] 80% — White (no bonuses)
+[*][b]Uncommon[/b] 16% — Green
+[*][b]Rare[/b] 3.2% — Blue
+[*][b]Epic[/b] 0.64% — Purple
+[*][b]Legendary[/b] 0.16% — Gold
+[/list]
+
+[h2]Bonuses by item type[/h2]
+Higher rarities improve items that support the stat: [b]weapons[/b] (damage, weight), [b]clothing[/b] (defense, run speed, vision/hearing), [b]containers[/b] (capacity, encumbrance), [b]drainables[/b] (capacity), [b]literature[/b] (mood, reading speed), [b]flashlights[/b] (battery), [b]food[/b] (hunger reduction).
+
+[h2]Crafting[/h2]
+Crafted output rarity is based on [b]ingredient rarities[/b] (Factorio-style): output is at least the highest tier among ingredients; mixed rarities use a weighted result; crafting skill can nudge the result.
+
+[h2]Optional: ZombieBuddy[/h2]
+[url=https://steamcommunity.com/sharedfiles/filedetails/?id=3619862853][b]ZombieBuddy[/b][/url] enables Java-based bonuses (e.g. weapon weight) that can't be appliad in pure Lua. But you can play without it.
+
+[h2]Compatible mods (optional)[/h2]
+[list]
+[*][url=https://steamcommunity.com/sharedfiles/filedetails/?id=3437629766][b]CleanUI[/b][/url] — load ZItemTiers after this.
+[*][url=https://steamcommunity.com/sharedfiles/filedetails/?id=3378285185][b]Starlit Library[/b][/url] — detailed tier bonus tooltips.
+[*][url=https://steamcommunity.com/sharedfiles/filedetails/?id=3604080281][b]Better Clothing Info[/b][/url] — shows tier bonuses in clothing comparison UI.
+[/list]
+
+[hr][/hr]
+[url=https://github.com/zed-0xff]GitHub[/url] · [url=https://ko-fi.com/zed_0xff][img]https://i.imgur.com/Utx6OIH.png[/img][/url] · Author: zed_0xff
