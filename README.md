@@ -1,5 +1,7 @@
 # Zed's Item Tiers (ZItemTiers)
 
+![ZItemTiers](common/poster.png)
+
 Adds a **probability-based item rarity system** to Project Zomboid. Any item can spawn with any rarity; higher tiers grant stat bonuses.
 
 ## Rarities
