@@ -26,17 +26,17 @@ local function setupMoveableBreakChanceHook()
         -- Call original function to get base break chance
         local breakChance = originalGetBreakChance(self, _player)
         
-        print("ZItemTiers: [Moveable] getBreakChance called - base: " .. tostring(breakChance) .. ", isMoveable: " .. tostring(self.isMoveable) .. ", canBreak: " .. tostring(self.canBreak) .. ", pickUpTool: " .. tostring(self.pickUpTool))
+--        print("ZItemTiers: [Moveable] getBreakChance called - base: " .. tostring(breakChance) .. ", isMoveable: " .. tostring(self.isMoveable) .. ", canBreak: " .. tostring(self.canBreak) .. ", pickUpTool: " .. tostring(self.pickUpTool))
         
         -- If no break chance or no player, return original value
         if not breakChance or breakChance <= 0 or not _player then
-            print("ZItemTiers: [Moveable] Early return - breakChance: " .. tostring(breakChance) .. ", player: " .. tostring(_player ~= nil))
+--            print("ZItemTiers: [Moveable] Early return - breakChance: " .. tostring(breakChance) .. ", player: " .. tostring(_player ~= nil))
             return breakChance
         end
         
         -- Only apply if this is a moveable that can break and requires a tool
         if not self.isMoveable or not self.canBreak or not self.pickUpTool then
-            print("ZItemTiers: [Moveable] Early return - conditions not met")
+--            print("ZItemTiers: [Moveable] Early return - conditions not met")
             return breakChance
         end
         
@@ -54,7 +54,7 @@ local function setupMoveableBreakChanceHook()
             return nil
         end)
         
-        print("ZItemTiers: [Moveable] getToolDefinition - success: " .. tostring(successGetToolDef) .. ", result: " .. tostring(result) .. ", result type: " .. type(result) .. ", pickUpTool: " .. tostring(self.pickUpTool))
+--        print("ZItemTiers: [Moveable] getToolDefinition - success: " .. tostring(successGetToolDef) .. ", result: " .. tostring(result) .. ", result type: " .. type(result) .. ", pickUpTool: " .. tostring(self.pickUpTool))
         
         if successGetToolDef and result then
             toolDef = result

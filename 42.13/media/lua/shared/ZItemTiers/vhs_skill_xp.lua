@@ -1,3 +1,4 @@
+--[[
 -- VHS skill XP bonus hook
 -- Applies bonus skill XP when VHS finishes playing
 
@@ -747,3 +748,4 @@ Events.OnGameBoot.Add(function()
     print("ZItemTiers: [VHS XP] setupRemoveMediaHook result: " .. tostring(removeMediaResult))
     print("ZItemTiers: [VHS XP] Hooks setup complete")
 end)
+]]
