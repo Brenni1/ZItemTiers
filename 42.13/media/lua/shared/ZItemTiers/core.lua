@@ -35,37 +35,32 @@ ZItemTiers.BlacklistedItems = {
 ZItemTiers.RarityProbabilities = {0.80, 0.16, 0.032, 0.0064, 0.0016}
 
 -- Global constants for convenience
-ZItemTier = ZItemTier or {}
-ZItemTier.Common = 1
-ZItemTier.Uncommon = 2
-ZItemTier.Rare = 3
-ZItemTier.Epic = 4
-ZItemTier.Legendary = 5
+ZItemTiers.CommonIdx = 1
 
 -- Rarity metadata: name, color, and index
 ZItemTiers.Rarities = {
     Common = {
-        index = ZItemTier.Common,
+        index = ZItemTiers.CommonIdx,
         name = "Common",
         color = {r=1.0, g=1.0, b=1.0},  -- White
     },
     Uncommon = {
-        index = ZItemTier.Uncommon,
+        index = ZItemTiers.CommonIdx + 1,
         name = "Uncommon",
         color = {r=0.2, g=1.0, b=0.2},  -- Green
     },
     Rare = {
-        index = ZItemTier.Rare,
+        index = ZItemTiers.CommonIdx + 2,
         name = "Rare",
         color = {r=0.2, g=0.4, b=1.0},  -- Blue
     },
     Epic = {
-        index = ZItemTier.Epic,
+        index = ZItemTiers.CommonIdx + 3,
         name = "Epic",
         color = {r=0.8, g=0.2, b=1.0},  -- Purple
     },
     Legendary = {
-        index = ZItemTier.Legendary,
+        index = ZItemTiers.CommonIdx + 4,
         name = "Legendary",
         color = {r=1.0, g=0.8, b=0.0},  -- Gold/Yellow
     },
