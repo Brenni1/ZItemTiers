@@ -7,7 +7,7 @@ import zombie.inventory.types.InventoryContainer;
 
 /**
  * Optional Java patches for InventoryContainer items.
- * This patch applies rarity-based max item encumbrance bonus to InventoryContainer.getMaxItemSize().
+ * This patch applies tier-based max item encumbrance bonus to InventoryContainer.getMaxItemSize().
  * 
  * Note: maxItemSize is read from script item, so we need to patch getMaxItemSize() to apply the bonus.
  * 
@@ -35,7 +35,7 @@ public class Patch_InventoryContainer {
     }
     
     /**
-     * Patch InventoryContainer.getMaxItemSize() to apply rarity-based max encumbrance bonus.
+     * Patch InventoryContainer.getMaxItemSize() to apply tier-based max encumbrance bonus.
      * Uses OnExit to modify the return value without duplicating the original method logic.
      */
     @Patch(className = "zombie.inventory.types.InventoryContainer", methodName = "getMaxItemSize")
@@ -44,7 +44,7 @@ public class Patch_InventoryContainer {
         public static void onExit(@Patch.This InventoryContainer self, @Patch.Return(readOnly = false) float returnValue) {
             // Only apply bonus if maxItemSize > 0 (some containers don't have this restriction)
             if (returnValue > 0.0f) {
-                // Apply rarity-based max encumbrance bonus (flat additive)
+                // Apply tier-based max encumbrance bonus (flat additive)
                 float bonus = getMaxEncumbranceBonus(self);
                 if (bonus > 0.0f) {
                     returnValue = returnValue + bonus;

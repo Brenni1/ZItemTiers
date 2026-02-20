@@ -6,7 +6,7 @@ require "ZItemTiers/core"
 -- Track if hook is already set up
 local hookSetup = false
 
--- Hook into ISMoveableSpriteProps:getBreakChance to reduce break chance based on tool rarity
+-- Hook into ISMoveableSpriteProps:getBreakChance to reduce break chance based on tool tier
 local function setupMoveableBreakChanceHook()
     if hookSetup then
         return  -- Already set up
@@ -154,7 +154,7 @@ local function setupMoveableBreakChanceHook()
             
             print("ZItemTiers: [Moveable] Sample tool type: " .. toolType)
             
-            -- Find all tools of this type and pick the one with highest rarity
+            -- Find all tools of this type and pick the one with highest tier
             local bestTool = nil
             local bestTierIndex = 0
             
@@ -185,11 +185,11 @@ local function setupMoveableBreakChanceHook()
                         end)
                         
                         if successGet and item then
-                            local rarity = ZItemTiers.GetItemRarity(item)
-                            if rarity then
-                                local rarityData = ZItemTiers.Rarities[rarity]
-                                if rarityData then
-                                    local tierIndex = rarityData.index
+                            local tier = ZItemTiers.GetItemTier(item)
+                            if tier then
+                                local tierData = ZItemTiers.Tiers[tier]
+                                if tierData then
+                                    local tierIndex = tierData.index
                                     if tierIndex > bestTierIndex then
                                         bestTool = item
                                         bestTierIndex = tierIndex
@@ -201,17 +201,17 @@ local function setupMoveableBreakChanceHook()
                 end
             end
             
-            -- Apply reduction if we found a tool with rarity
+            -- Apply reduction if we found a tool with tier
             if bestTool and bestTierIndex > 1 then
-                local rarity = ZItemTiers.GetItemRarity(bestTool)
-                print("ZItemTiers: [Moveable] Best tool found: " .. tostring(bestTool:getFullType()) .. " (rarity: " .. tostring(rarity) .. ", tier: " .. bestTierIndex .. ")")
+                local tier = ZItemTiers.GetItemTier(bestTool)
+                print("ZItemTiers: [Moveable] Best tool found: " .. tostring(bestTool:getFullType()) .. " (tier: " .. tostring(tier) .. ", tier: " .. bestTierIndex .. ")")
                 
                 local reduction = (bestTierIndex - 1) * 5
                 local newBreakChance = math.max(0, breakChance - reduction)
                 print("ZItemTiers: [Moveable] Reducing break chance from " .. breakChance .. "% to " .. newBreakChance .. "% (reduction: " .. reduction .. "%)")
                 return newBreakChance
             else
-                print("ZItemTiers: [Moveable] No tool with rarity found (bestTierIndex: " .. bestTierIndex .. ")")
+                print("ZItemTiers: [Moveable] No tool with tier found (bestTierIndex: " .. bestTierIndex .. ")")
             end
             
             return breakChance
@@ -234,7 +234,7 @@ local function setupMoveableBreakChanceHook()
             return breakChance
         end
         
-        -- Find all tools of the required types and pick the one with highest rarity
+        -- Find all tools of the required types and pick the one with highest tier
         local bestTool = nil
         local bestTierIndex = 0
         
@@ -266,11 +266,11 @@ local function setupMoveableBreakChanceHook()
                         end)
                         
                         if successGet and item then
-                            local rarity = ZItemTiers.GetItemRarity(item)
-                            if rarity then
-                                local rarityData = ZItemTiers.Rarities[rarity]
-                                if rarityData then
-                                    local tierIndex = rarityData.index
+                            local tier = ZItemTiers.GetItemTier(item)
+                            if tier then
+                                local tierData = ZItemTiers.Tiers[tier]
+                                if tierData then
+                                    local tierIndex = tierData.index
                                     if tierIndex > bestTierIndex then
                                         bestTool = item
                                         bestTierIndex = tierIndex
@@ -283,10 +283,10 @@ local function setupMoveableBreakChanceHook()
             end
         end
         
-        -- If we found a tool with rarity, apply the reduction
+        -- If we found a tool with tier, apply the reduction
         if bestTool and bestTierIndex > 1 then
-            local rarity = ZItemTiers.GetItemRarity(bestTool)
-            print("ZItemTiers: [Moveable] Best tool found: " .. tostring(bestTool:getFullType()) .. " (rarity: " .. tostring(rarity) .. ", tier: " .. bestTierIndex .. ")")
+            local tier = ZItemTiers.GetItemTier(bestTool)
+            print("ZItemTiers: [Moveable] Best tool found: " .. tostring(bestTool:getFullType()) .. " (tier: " .. tostring(tier) .. ", tier: " .. bestTierIndex .. ")")
             
             -- Reduce break chance by 5% per tier (tier 2 = -5%, tier 3 = -10%, etc.)
             local reduction = (bestTierIndex - 1) * 5
@@ -294,7 +294,7 @@ local function setupMoveableBreakChanceHook()
             print("ZItemTiers: [Moveable] Reducing break chance from " .. breakChance .. "% to " .. newBreakChance .. "% (reduction: " .. reduction .. "%)")
             return newBreakChance
         else
-            print("ZItemTiers: [Moveable] No tool with rarity found (bestTierIndex: " .. bestTierIndex .. ")")
+            print("ZItemTiers: [Moveable] No tool with tier found (bestTierIndex: " .. bestTierIndex .. ")")
         end
         
         return breakChance

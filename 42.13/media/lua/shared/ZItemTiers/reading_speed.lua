@@ -1,5 +1,5 @@
 -- Reading speed bonus hook for Literature items
--- Hooks into ISReadABook:getDuration() to apply rarity-based reading speed bonuses
+-- Hooks into ISReadABook:getDuration() to apply tier-based reading speed bonuses
 
 require "ZItemTiers/core"
 

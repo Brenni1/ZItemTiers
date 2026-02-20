@@ -1,5 +1,5 @@
 -- Mood bonus module for Literature items
--- Applies rarity-based mood bonuses (boredom/unhappiness/stress reduction)
+-- Applies tier-based mood bonuses (boredom/unhappiness/stress reduction)
 
 require "ZItemTiers/core"
 

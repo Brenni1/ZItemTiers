@@ -1,5 +1,5 @@
 -- Capacity bonus module
--- Applies rarity-based capacity bonuses to InventoryContainer items
+-- Applies tier-based capacity bonuses to InventoryContainer items
 
 require "ZItemTiers/core"
 

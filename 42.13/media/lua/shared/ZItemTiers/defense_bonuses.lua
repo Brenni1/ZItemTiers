@@ -1,5 +1,5 @@
 -- Defense bonuses module
--- Applies rarity-based bite and scratch defense bonuses to Clothing items
+-- Applies tier-based bite and scratch defense bonuses to Clothing items
 
 require "ZItemTiers/core"
 

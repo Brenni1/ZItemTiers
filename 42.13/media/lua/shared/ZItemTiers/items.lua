@@ -1,18 +1,18 @@
--- Item Rarity Configuration
+-- Item Tier Configuration
 -- 
--- This mod implements a probability-based rarity system where ANY item can spawn
--- with ANY rarity based on global probabilities, not hardcoded item-to-rarity mappings.
+-- This mod implements a probability-based tier system where ANY item can spawn
+-- with ANY tier based on global probabilities, not hardcoded item-to-tier mappings.
 --
--- Rarity probabilities are defined in core.lua:
+-- Tier probabilities are defined in core.lua:
 --   Common: 60% chance
 --   Uncommon: 25% chance  
 --   Rare: 10% chance
 --   Epic: 4% chance
 --   Legendary: 1% chance
 --
--- When an item spawns, it has a chance to be any rarity. The rarity affects
+-- When an item spawns, it has a chance to be any tier. The tier affects
 -- the spawn chance multiplier (rarer items spawn less frequently).
 --
--- You can customize rarity probabilities in core.lua if desired.
+-- You can customize tier probabilities in core.lua if desired.
 
 -- No item lists needed - all items use the same probability system!

@@ -1,7 +1,7 @@
 [h1]Zed's Item Tiers[/h1]
-Tired of the same loot everywhere and losing the thrill of exploration? [b]Zed's Item Tiers[/b] adds a [b]probability-based rarity system[/b]: any item can spawn as Common, Uncommon, Rare, Epic, or Legendary. Higher tiers grant real stat bonuses—lighter bags, deadlier weapons, tougher gear—so that next find might actually matter.
+Tired of the same loot everywhere and losing the thrill of exploration? [b]Zed's Item Tiers[/b] adds a [b]probability-based tier system[/b]: any item can spawn as Common, Uncommon, Rare, Epic, or Legendary. Higher tiers grant real stat bonuses—lighter bags, deadlier weapons, tougher gear—so that next find might actually matter.
 
-[h2]Rarities[/h2]
+[h2]Tiers[/h2]
 [list]
 [*][b]Common[/b] 80% — White (no bonuses)
 [*][b]Uncommon[/b] 16% — Green
@@ -11,10 +11,10 @@ Tired of the same loot everywhere and losing the thrill of exploration? [b]Zed's
 [/list]
 
 [h2]Bonuses by item type[/h2]
-Higher rarities improve items that support the stat: [b]weapons[/b] (damage, weight), [b]clothing[/b] (defense, run speed, vision/hearing), [b]containers[/b] (capacity, encumbrance), [b]drainables[/b] (capacity), [b]literature[/b] (mood, reading speed), [b]flashlights[/b] (battery), [b]food[/b] (hunger reduction).
+Higher tiers improve items that support the stat: [b]weapons[/b] (damage, weight), [b]clothing[/b] (defense, run speed, vision/hearing), [b]containers[/b] (capacity, encumbrance), [b]drainables[/b] (capacity), [b]literature[/b] (mood, reading speed), [b]flashlights[/b] (battery), [b]food[/b] (hunger reduction).
 
 [h2]Crafting[/h2]
-Crafted output rarity is based on [b]ingredient rarities[/b] (Factorio-style): output is at least the highest tier among ingredients; mixed rarities use a weighted result; crafting skill can nudge the result.
+Crafted output tier is based on [b]ingredient tiers[/b] (Factorio-style): output is at least the highest tier among ingredients; mixed tiers use a weighted result; crafting skill can nudge the result.
 
 [h2]Optional: ZombieBuddy[/h2]
 [url=https://steamcommunity.com/sharedfiles/filedetails/?id=3619862853][b]ZombieBuddy[/b][/url] enables Java-based bonuses (e.g. weapon weight) that can't be appliad in pure Lua. But you can play without it.

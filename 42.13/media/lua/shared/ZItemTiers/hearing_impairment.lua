@@ -1,5 +1,5 @@
 -- Hearing impairment reduction module
--- Applies rarity-based hearing impairment reduction to Clothing items
+-- Applies tier-based hearing impairment reduction to Clothing items
 
 require "ZItemTiers/core"
 

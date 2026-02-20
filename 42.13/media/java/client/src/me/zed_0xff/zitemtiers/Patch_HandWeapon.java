@@ -9,7 +9,7 @@ import java.util.HashMap;
 
 /**
  * Optional Java patches for HandWeapon items.
- * This patch applies rarity-based weight reduction to HandWeapon.getActualWeight().
+ * This patch applies tier-based weight reduction to HandWeapon.getActualWeight().
  * 
  * Note: Damage can be modified directly from Lua using setMinDamage()/setMaxDamage(),
  * so only weight needs to be patched here (since getActualWeight() reads from script item).
@@ -19,21 +19,21 @@ import java.util.HashMap;
  */
 public class Patch_HandWeapon {
     
-    // Helper function to get rarity bonus multiplier from Lua
+    // Helper function to get tier bonus multiplier from Lua
     public static float getWeightReductionMultiplier(HandWeapon weapon) {
         try {
             Object zItemTiers = LuaManager.env.rawget("ZItemTiers");
             if (zItemTiers instanceof KahluaTable) {
-                Object getItemRarity = ((KahluaTable) zItemTiers).rawget("GetItemRarity");
-                if (getItemRarity != null) {
-                    Object rarityName = LuaManager.caller.protectedCall(LuaManager.thread, getItemRarity, weapon);
-                    if (rarityName == null) {
-                        return 1.0f;  // No rarity, no reduction
+                Object getItemTier = ((KahluaTable) zItemTiers).rawget("GetItemTier");
+                if (getItemTier != null) {
+                    Object tierName = LuaManager.caller.protectedCall(LuaManager.thread, getItemTier, weapon);
+                    if (tierName == null) {
+                        return 1.0f;  // No tier, no reduction
                     }
                     
-                    Object rarityBonuses = ((KahluaTable) zItemTiers).rawget("RarityBonuses");
-                    if (rarityBonuses instanceof KahluaTable) {
-                        Object bonuses = ((KahluaTable) rarityBonuses).rawget(rarityName.toString());
+                    Object tierBonuses = ((KahluaTable) zItemTiers).rawget("TierBonuses");
+                    if (tierBonuses instanceof KahluaTable) {
+                        Object bonuses = ((KahluaTable) tierBonuses).rawget(tierName.toString());
                         if (bonuses instanceof KahluaTable) {
                             KahluaTable bonusesTable = (KahluaTable) bonuses;
                             Object weightReduction = bonusesTable.rawget("weightReduction");
@@ -52,7 +52,7 @@ public class Patch_HandWeapon {
     }
     
     /**
-     * Patch HandWeapon.getActualWeight() to apply rarity-based weight reduction.
+     * Patch HandWeapon.getActualWeight() to apply tier-based weight reduction.
      * Uses OnExit to modify the return value without duplicating the original method logic.
      * 
      * Note: Damage can be modified directly from Lua using setMinDamage()/setMaxDamage(),
@@ -62,7 +62,7 @@ public class Patch_HandWeapon {
     public static class Patch_getActualWeight {
         @Patch.OnExit
         public static void onExit(@Patch.This HandWeapon self, @Patch.Return(readOnly = false) float returnValue) {
-            // Apply rarity-based weight reduction
+            // Apply tier-based weight reduction
             float multiplier = getWeightReductionMultiplier(self);
             if (multiplier < 1.0f) {
                 returnValue = returnValue * multiplier;

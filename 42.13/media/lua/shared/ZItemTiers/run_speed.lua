@@ -1,5 +1,5 @@
 -- Run speed modifier bonus module
--- Applies rarity-based run speed modifier bonuses to Clothing items
+-- Applies tier-based run speed modifier bonuses to Clothing items
 
 require "ZItemTiers/core"
 

@@ -1,6 +1,6 @@
--- Item Rarity Mod
--- Adds rarity-based bonus system to items
--- Each item can spawn with any rarity based on probability, not hardcoded item-to-rarity mapping
+-- Item Tier Mod
+-- Adds tier-based bonus system to items
+-- Each item can spawn with any tier based on probability, not hardcoded item-to-tier mapping
 
 ZItemTiers = ZItemTiers or {}
 
@@ -9,11 +9,11 @@ if not ZItemTiers._bonusesAppliedSessionId then
     ZItemTiers._bonusesAppliedSessionId = ZombRand(1000000)
 end
 
--- Blacklist of items that should never have rarity assigned
--- Items in this list will never receive rarity bonuses
+-- Blacklist of items that should never have tier assigned
+-- Items in this list will never receive tier bonuses
 ZItemTiers.BlacklistedItems = {
     ["Base.IDcard"] = true,
-    -- Keys (a key either works or it doesn't - no benefit from rarity)
+    -- Keys (a key either works or it doesn't - no benefit from tier)
     ["Base.Key1"] = true,
     ["Base.Key_Blank"] = true,
     ["Base.CombinationPadlock"] = true,
@@ -22,23 +22,23 @@ ZItemTiers.BlacklistedItems = {
     ["Base.CarKey"] = true,
     ["Base.Brochure"] = true,
     ["Base.Flier"] = true,
-    -- Maps (maps are informational items, no benefit from rarity)
+    -- Maps (maps are informational items, no benefit from tier)
     ["Base.Map"] = true,
     ["Base.GolfTee"] = true,
     -- VHS tapes (blacklisted by pattern in IsItemBlacklisted; bonus commented out for now)
 }
 
--- Rarity probabilities: [Common, Uncommon, Rare, Epic, Legendary]
--- These determine the chance that an item will be assigned each rarity when it spawns
+-- Tier probabilities: [Common, Uncommon, Rare, Epic, Legendary]
+-- These determine the chance that an item will be assigned each tier when it spawns
 -- Values should sum to 1.0 (100%)
 -- Epic and Legendary are intentionally very rare
-ZItemTiers.RarityProbabilities = {0.80, 0.16, 0.032, 0.0064, 0.0016}
+ZItemTiers.TierProbabilities = {0.80, 0.16, 0.032, 0.0064, 0.0016}
 
 -- Global constants for convenience
 ZItemTiers.CommonIdx = 1
 
--- Rarity metadata: name, color, and index
-ZItemTiers.Rarities = {
+-- Tier metadata: name, color, and index
+ZItemTiers.Tiers = {
     Common = {
         index = ZItemTiers.CommonIdx,
         name = "Common",
@@ -66,12 +66,12 @@ ZItemTiers.Rarities = {
     },
 }
 
--- Fixed rarity-based bonuses
--- These bonuses are applied to ALL items of that rarity, regardless of item type
+-- Fixed tier-based bonuses
+-- These bonuses are applied to ALL items of that tier, regardless of item type
 -- For HandWeapon items: damage is applied directly from Lua, weight requires Java patches
 -- For other items: weight reduction is applied directly
 -- For shoes (Clothing with SHOES body location): run speed modifier is applied
-ZItemTiers.RarityBonuses = {
+ZItemTiers.TierBonuses = {
     Common = {
         -- No bonuses for Common items
     },
@@ -145,18 +145,18 @@ ZItemTiers.RarityBonuses = {
     },
 }
 
--- Roll a random rarity based on rarity probabilities
-function ZItemTiers.RollRarity()
+-- Roll a random tier based on tier probabilities
+function ZItemTiers.RollTier()
     local roll = ZombRand(10000) / 10000.0  -- Random 0.0 to 1.0
     local cumulative = 0
     
-    for i = 1, #ZItemTiers.RarityProbabilities do
-        cumulative = cumulative + ZItemTiers.RarityProbabilities[i]
+    for i = 1, #ZItemTiers.TierProbabilities do
+        cumulative = cumulative + ZItemTiers.TierProbabilities[i]
         if roll <= cumulative then
-            -- Find rarity name by index
-            for rarityName, rarityData in pairs(ZItemTiers.Rarities) do
-                if rarityData.index == i then
-                    return rarityName
+            -- Find tier name by index
+            for tierName, tierData in pairs(ZItemTiers.Tiers) do
+                if tierData.index == i then
+                    return tierName
                 end
             end
         end
@@ -166,8 +166,8 @@ function ZItemTiers.RollRarity()
     return "Common"
 end
 
--- Check if an item is blacklisted and should never receive rarity
--- Returns true if the item should be excluded from rarity assignment
+-- Check if an item is blacklisted and should never receive tier
+-- Returns true if the item should be excluded from tier assignment
 function ZItemTiers.IsItemBlacklisted(item)
     if not item then return true end
     
@@ -257,8 +257,8 @@ function ZItemTiers.GetBaseRunSpeedModifier(item, modData)
     return base
 end
 
--- Apply fixed rarity-based bonuses to an item
-function ZItemTiers.ApplyRarityBonuses(item, rarity)
+-- Apply fixed tier-based bonuses to an item
+function ZItemTiers.ApplyTierBonuses(item, tier)
     if not item then return end
     
     local itemType = item:getFullType()
@@ -269,18 +269,18 @@ function ZItemTiers.ApplyRarityBonuses(item, rarity)
         isVHS = true
     end
     
-    local rarityData = ZItemTiers.Rarities[rarity]
-    if not rarityData then 
+    local tierData = ZItemTiers.Tiers[tier]
+    if not tierData then 
         if isVHS then
-            print("ZItemTiers: [VHS] ERROR: No rarity data for " .. itemType .. " rarity " .. tostring(rarity))
+            print("ZItemTiers: [VHS] ERROR: No tier data for " .. itemType .. " tier " .. tostring(tier))
         end
         return 
     end
     
-    local bonuses = ZItemTiers.RarityBonuses[rarity]
+    local bonuses = ZItemTiers.TierBonuses[tier]
     if not bonuses then 
         if isVHS then
-            print("ZItemTiers: [VHS] ERROR: No bonuses for " .. itemType .. " rarity " .. tostring(rarity))
+            print("ZItemTiers: [VHS] ERROR: No bonuses for " .. itemType .. " tier " .. tostring(tier))
         end
         return 
     end
@@ -294,12 +294,12 @@ function ZItemTiers.ApplyRarityBonuses(item, rarity)
         return 
     end
     
-    -- Check if this exact rarity and bonuses have already been applied in this game session
+    -- Check if this exact tier and bonuses have already been applied in this game session
     -- Compare with global session ID to ensure bonuses were applied in the current session
-    if modData.itemRarity == rarity and modData._bonusesApplied == ZItemTiers._bonusesAppliedSessionId then
-        -- Bonuses already applied for this rarity in this session, skip
+    if modData.itemTier == tier and modData._bonusesApplied == ZItemTiers._bonusesAppliedSessionId then
+        -- Bonuses already applied for this tier in this session, skip
         if isVHS then
-            print("ZItemTiers: [VHS] Bonuses already applied for " .. itemType .. " (rarity: " .. tostring(rarity) .. ", session: " .. tostring(modData._bonusesApplied) .. ")")
+            print("ZItemTiers: [VHS] Bonuses already applied for " .. itemType .. " (tier: " .. tostring(tier) .. ", session: " .. tostring(modData._bonusesApplied) .. ")")
         end
         return
     end
@@ -324,8 +324,8 @@ function ZItemTiers.ApplyRarityBonuses(item, rarity)
         end
     end
     
-    -- Store rarity in modData
-    modData.itemRarity = rarity
+    -- Store tier in modData
+    modData.itemTier = tier
     
     -- Store the target weight reduction percentage so we can re-apply it if weight gets reset
     if bonuses.weightReduction then
@@ -542,7 +542,7 @@ function ZItemTiers.ApplyRarityBonuses(item, rarity)
             isVHS = true
         end
         if isVHS and modData then
-            print("ZItemTiers: [VHS] Applying skill XP bonus to: " .. itemType .. ", rarity: " .. rarity .. ", bonus: " .. tostring(bonuses.vhsSkillXpBonus))
+            print("ZItemTiers: [VHS] Applying skill XP bonus to: " .. itemType .. ", tier: " .. tier .. ", bonus: " .. tostring(bonuses.vhsSkillXpBonus))
             modData.itemVhsSkillXpBonus = bonuses.vhsSkillXpBonus
         end
     end
@@ -608,7 +608,7 @@ function ZItemTiers.ApplyRarityBonuses(item, rarity)
         
         -- Only apply bonus if hunger change is negative (reduces hunger) and we got the original from script item
         if originalHungChange and originalHungChange < 0.0 and successGetScript and scriptItem then
-            local tierIndex = rarityData.index
+            local tierIndex = tierData.index
             local multiplier = 1.0 + (tierIndex - 1) * 0.2
             
             -- Always use script item value as the true base (update stored value if different)
@@ -672,16 +672,16 @@ function ZItemTiers.ApplyRarityBonuses(item, rarity)
     -- Future bonuses can be added here following the same pattern
 end
 
--- Get rarity for an item
-function ZItemTiers.GetItemRarity(item)
+-- Get tier for an item
+function ZItemTiers.GetItemTier(item)
     if not item then return "Common" end
     
     local modData = item:getModData()
-    if not modData or not modData.itemRarity then
+    if not modData or not modData.itemTier then
         return "Common"
     end
     
-    return modData.itemRarity
+    return modData.itemTier
 end
 
 -- Get bonuses for an item (for display purposes)

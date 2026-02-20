@@ -19,7 +19,7 @@
 //         if (strItemReport == null) {
 //             strItemReport = Translator.getText("Item Report") + ":";
 //         } else if (label.equals(strItemReport)) {
-//             label = Translator.getText("Rarity") + ":";
+//             label = Translator.getText("Tier") + ":";
 //         }
 //     }
 // }

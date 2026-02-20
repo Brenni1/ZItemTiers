@@ -1,7 +1,7 @@
 -- Tests for run speed modifier bonus (ZItemTiers/run_speed.lua)
--- Verifies that Clothing items with run speed modifiers receive correct bonuses per rarity
+-- Verifies that Clothing items with run speed modifiers receive correct bonuses per tier
 
--- Run speed bonus values per rarity (from core.lua RarityBonuses)
+-- Run speed bonus values per tier (from core.lua TierBonuses)
 local RUN_SPEED_BONUSES = {
     Uncommon  = 0.1,
     Rare      = 0.2,
@@ -20,26 +20,26 @@ ZBSpec.describe("ZItemTiers.ApplyRunSpeedModifier - Sneakers", function()
     it("keeps run speed unchanged for Common", function()
         local item = create_clothing("Base.Shoes_Sneakers")
         local base = item:getRunSpeedModifier()
-        apply_rarity(item, "Common")
+        apply_tier(item, "Common")
         assert.is_equal(base, item:getRunSpeedModifier())
     end)
 
-    for rarity, bonus in pairs(RUN_SPEED_BONUSES) do
-        it("increases run speed by +" .. bonus .. " for " .. rarity, function()
+    for tier, bonus in pairs(RUN_SPEED_BONUSES) do
+        it("increases run speed by +" .. bonus .. " for " .. tier, function()
             local item = create_clothing("Base.Shoes_Sneakers")
             local base = get_base_run_speed(item)
-            apply_rarity(item, rarity)
+            apply_tier(item, tier)
             local expected = base + bonus
             local actual = item:getRunSpeedModifier()
             assert.is_true(math.abs(actual - expected) < 0.001,
-                rarity .. ": expected " .. expected .. ", got " .. actual)
+                tier .. ": expected " .. expected .. ", got " .. actual)
         end)
     end
 
     it("stores base run speed in modData", function()
         local item = create_clothing("Base.Shoes_Sneakers")
         local base = get_base_run_speed(item)
-        apply_rarity(item, "Epic")
+        apply_tier(item, "Epic")
         local modData = item:getModData()
         assert.is_not_nil(modData.itemRunSpeedModifierBase)
         assert.is_true(math.abs(modData.itemRunSpeedModifierBase - base) < 0.001,
@@ -48,9 +48,9 @@ ZBSpec.describe("ZItemTiers.ApplyRunSpeedModifier - Sneakers", function()
 
     it("does not compound bonus on re-application", function()
         local item = create_clothing("Base.Shoes_Sneakers")
-        apply_rarity(item, "Epic")
+        apply_tier(item, "Epic")
         local afterFirst = item:getRunSpeedModifier()
-        apply_rarity(item, "Epic")
+        apply_tier(item, "Epic")
         local afterSecond = item:getRunSpeedModifier()
         assert.is_true(math.abs(afterFirst - afterSecond) < 0.001,
             "Should not compound: first=" .. afterFirst .. " second=" .. afterSecond)
@@ -68,7 +68,7 @@ ZBSpec.describe("run speed edge cases", function()
         local item = create_clothing("Base.Vest_DefaultDECAL_PATCH")
         local base = item:getRunSpeedModifier()
         -- base should be 1.0 (neutral) — no bonus should be applied
-        apply_rarity(item, "Legendary")
+        apply_tier(item, "Legendary")
         local after = item:getRunSpeedModifier()
         assert.is_true(math.abs(base - after) < 0.001,
             "Clothing without run speed mod should stay at " .. base .. ", got " .. after)

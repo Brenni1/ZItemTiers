@@ -1,5 +1,5 @@
 -- CleanUI mod integration for inventory item name coloring
--- Hooks into CleanUI_getItemNameColor() to return rarity colors
+-- Hooks into CleanUI_getItemNameColor() to return tier colors
 -- Uses ISInventoryItem.renderItemIcon() hook to set item context before getItemNameColor is called
 --
 -- NOTE TO CLEANUI AUTHOR:
@@ -26,7 +26,7 @@ local successCleanUI, resultCleanUI = pcall(function()
 end)
 
 if hasCleanUI and _G and _G.CleanUI_getItemNameColor then
-    -- Hook into CleanUI_getItemNameColor to return rarity colors
+    -- Hook into CleanUI_getItemNameColor to return tier colors
     local originalCleanUI_getItemNameColor = _G.CleanUI_getItemNameColor
     if originalCleanUI_getItemNameColor then
         function _G.CleanUI_getItemNameColor()
@@ -34,15 +34,15 @@ if hasCleanUI and _G and _G.CleanUI_getItemNameColor then
             local currentItem = ZItemTiers._cleanui_currentItem
             
             if currentItem then
-                -- Check if item has rarity
-                local rarity = ZItemTiers.GetItemRarity(currentItem)
+                -- Check if item has tier
+                local tier = ZItemTiers.GetItemTier(currentItem)
                 
-                if rarity and ZItemTiers and ZItemTiers.Rarities and ZItemTiers.Rarities[rarity] then
-                    local rarityData = ZItemTiers.Rarities[rarity]
-                    local color = rarityData.color
+                if tier and ZItemTiers and ZItemTiers.Tiers and ZItemTiers.Tiers[tier] then
+                    local tierData = ZItemTiers.Tiers[tier]
+                    local color = tierData.color
                     
-                    -- Return rarity color (only if not Common, since Common is white like default)
-                    if rarity ~= "Common" then
+                    -- Return tier color (only if not Common, since Common is white like default)
+                    if tier ~= "Common" then
                         return {r = color.r, g = color.g, b = color.b}
                     end
                 end
@@ -101,34 +101,34 @@ if hasCleanUI and _G and _G.CleanUI_getItemNameColor then
         ISInventoryPane.renderdetails = wrappedRenderDetails
     end
     
-    -- Hook into refreshContainer to ungroup items with different rarities
+    -- Hook into refreshContainer to ungroup items with different tiers
     if not ISInventoryPane._zItemTiers_cleanui_refreshContainer_hooked then
         ISInventoryPane._zItemTiers_cleanui_refreshContainer_hooked = true
         
         -- Store the original refreshContainer
         local originalRefreshContainer = ISInventoryPane.refreshContainer
         
-        -- Wrap refreshContainer to ungroup items with different rarities
+        -- Wrap refreshContainer to ungroup items with different tiers
         function ISInventoryPane:refreshContainer()
             -- Call original refreshContainer first
             originalRefreshContainer(self)
             
-            -- After items are grouped, check for mixed rarities and ungroup them
+            -- After items are grouped, check for mixed tiers and ungroup them
             if self.itemslist then
                 local playerObj = getSpecificPlayer(self.player)
                 local newItemslist = {}
                 
                 for _, group in ipairs(self.itemslist) do
                     if group.items and #group.items > 0 then
-                        -- Check if all items in this group have the same rarity
-                        local rarities = {}
-                        local itemsByRarity = {}
+                        -- Check if all items in this group have the same tier
+                        local tiers = {}
+                        local itemsByTier = {}
                         
                         -- CleanUI adds a duplicate first item at the end of refreshContainer
                         -- Since we hook after originalRefreshContainer, the duplicate should already be there
-                        -- We need to check all items (including potential duplicates) and group by rarity
+                        -- We need to check all items (including potential duplicates) and group by tier
                         
-                        -- Collect all unique items and their rarities
+                        -- Collect all unique items and their tiers
                         local seenItems = {}
                         for _, item in ipairs(group.items) do
                             if item then
@@ -147,12 +147,12 @@ if hasCleanUI and _G and _G.CleanUI_getItemNameColor then
                                 -- Only process each unique item once
                                 if itemId and not seenItems[itemId] then
                                     seenItems[itemId] = true
-                                    local rarity = ZItemTiers and ZItemTiers.GetItemRarity and ZItemTiers.GetItemRarity(item) or "Common"
-                                    if not itemsByRarity[rarity] then
-                                        itemsByRarity[rarity] = {}
-                                        rarities[#rarities + 1] = rarity
+                                    local tier = ZItemTiers and ZItemTiers.GetItemTier and ZItemTiers.GetItemTier(item) or "Common"
+                                    if not itemsByTier[tier] then
+                                        itemsByTier[tier] = {}
+                                        tiers[#tiers + 1] = tier
                                     end
-                                    table.insert(itemsByRarity[rarity], item)
+                                    table.insert(itemsByTier[tier], item)
                                 elseif not itemId then
                                     -- Fallback: if we can't get ID, check by object reference
                                     local found = false
@@ -164,45 +164,45 @@ if hasCleanUI and _G and _G.CleanUI_getItemNameColor then
                                     end
                                     if not found then
                                         seenItems[item] = true
-                                        local rarity = ZItemTiers and ZItemTiers.GetItemRarity and ZItemTiers.GetItemRarity(item) or "Common"
-                                        if not itemsByRarity[rarity] then
-                                            itemsByRarity[rarity] = {}
-                                            rarities[#rarities + 1] = rarity
+                                        local tier = ZItemTiers and ZItemTiers.GetItemTier and ZItemTiers.GetItemTier(item) or "Common"
+                                        if not itemsByTier[tier] then
+                                            itemsByTier[tier] = {}
+                                            tiers[#tiers + 1] = tier
                                         end
-                                        table.insert(itemsByRarity[rarity], item)
+                                        table.insert(itemsByTier[tier], item)
                                     end
                                 end
                             end
                         end
                         
-                        -- If all items have the same rarity, keep the group as-is
-                        if #rarities <= 1 then
+                        -- If all items have the same tier, keep the group as-is
+                        if #tiers <= 1 then
                             table.insert(newItemslist, group)
                         else
-                            -- Items have different rarities - split into separate groups
-                            for _, rarity in ipairs(rarities) do
-                                local rarityItems = itemsByRarity[rarity]
-                                if rarityItems and #rarityItems > 0 then
-                                    -- Create a new group for this rarity
+                            -- Items have different tiers - split into separate groups
+                            for _, tier in ipairs(tiers) do
+                                local tierItems = itemsByTier[tier]
+                                if tierItems and #tierItems > 0 then
+                                    -- Create a new group for this tier
                                     local newGroup = {}
                                     newGroup.items = {}
                                     
-                                    -- Add the first item of THIS rarity as duplicate (CleanUI uses this for title/display)
-                                    -- This ensures each rarity group shows the correct rarity in the title
-                                    if #rarityItems > 0 then
-                                        table.insert(newGroup.items, rarityItems[1])
+                                    -- Add the first item of THIS tier as duplicate (CleanUI uses this for title/display)
+                                    -- This ensures each tier group shows the correct tier in the title
+                                    if #tierItems > 0 then
+                                        table.insert(newGroup.items, tierItems[1])
                                     end
                                     
-                                    -- Add all items of this rarity
-                                    for _, item in ipairs(rarityItems) do
+                                    -- Add all items of this tier
+                                    for _, item in ipairs(tierItems) do
                                         table.insert(newGroup.items, item)
                                     end
                                     
                                     newGroup.count = #newGroup.items
                                     newGroup.invPanel = group.invPanel
                                     
-                                    -- Recalculate name from the first item of this rarity group using the same logic as CleanUI
-                                    -- This ensures each rarity group shows the correct item name
+                                    -- Recalculate name from the first item of this tier group using the same logic as CleanUI
+                                    -- This ensures each tier group shows the correct item name
                                     if #newGroup.items > 0 and newGroup.items[1] and playerObj then
                                         local itemName = newGroup.items[1]:getName(playerObj)
                                         
@@ -229,9 +229,9 @@ if hasCleanUI and _G and _G.CleanUI_getItemNameColor then
                                     newGroup.inHotbar = group.inHotbar
                                     newGroup.matchesSearch = group.matchesSearch
                                     
-                                    -- Calculate weight for this rarity group
+                                    -- Calculate weight for this tier group
                                     local weight = 0
-                                    for _, item in ipairs(rarityItems) do
+                                    for _, item in ipairs(tierItems) do
                                         if item then
                                             weight = weight + item:getUnequippedWeight()
                                         end
@@ -260,6 +260,6 @@ if hasCleanUI and _G and _G.CleanUI_getItemNameColor then
             end
         end
         
-        print("ZItemTiers: Hooked ISInventoryPane.refreshContainer for CleanUI rarity ungrouping")
+        print("ZItemTiers: Hooked ISInventoryPane.refreshContainer for CleanUI tier ungrouping")
     end
 end

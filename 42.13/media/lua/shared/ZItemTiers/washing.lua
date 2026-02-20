@@ -1,8 +1,8 @@
--- Preserve rarity when washing items that get replaced (e.g., dirty rags -> clean rags)
+-- Preserve tier when washing items that get replaced (e.g., dirty rags -> clean rags)
 
 require "ZItemTiers/core"
 
--- Hook into ISWashClothing:complete() to preserve rarity when items are replaced
+-- Hook into ISWashClothing:complete() to preserve tier when items are replaced
 local function setupWashingHook()
     local ISWashClothing = ISWashClothing
     if not ISWashClothing then
@@ -20,7 +20,7 @@ local function setupWashingHook()
         
         -- Check if this item will be replaced (has getItemAfterCleaning)
         local willBeReplaced = false
-        local storedRarity = nil
+        local storedTier = nil
         local storedReplaceOnUse = nil
         
         if item then
@@ -34,8 +34,8 @@ local function setupWashingHook()
             if successGetReplace and replaceOnUse then
                 willBeReplaced = true
                 local modData = item:getModData()
-                if modData and modData.itemRarity then
-                    storedRarity = modData.itemRarity
+                if modData and modData.itemTier then
+                    storedTier = modData.itemTier
                     storedReplaceOnUse = replaceOnUse
                 end
             end
@@ -44,8 +44,8 @@ local function setupWashingHook()
         -- Call original complete function
         local result = originalComplete(self)
         
-        -- Helper function to find and apply rarity to replacement item
-        local function findAndApplyRarity()
+        -- Helper function to find and apply tier to replacement item
+        local function findAndApplyTier()
             if not character then
                 return false
             end
@@ -77,7 +77,7 @@ local function setupWashingHook()
                 return false
             end
             
-            -- Find the newly created item (matching the replacement type, no rarity or Common)
+            -- Find the newly created item (matching the replacement type, no tier or Common)
             for i = 0, size - 1 do
                 local successGet, newItem = pcall(function()
                     if items.get then
@@ -97,18 +97,18 @@ local function setupWashingHook()
                     if successGetType and itemType == storedReplaceOnUse then
                         local newModData = newItem:getModData()
                         if newModData then
-                            local currentRarity = newModData.itemRarity
-                            -- Apply rarity if item doesn't have it yet, or if it's Common (spawn_hooks might have set it)
-                            if not currentRarity or currentRarity == "Common" then
-                                newModData.itemRarity = storedRarity
-                                newModData.craftedFromRarity = true
+                            local currentTier = newModData.itemTier
+                            -- Apply tier if item doesn't have it yet, or if it's Common (spawn_hooks might have set it)
+                            if not currentTier or currentTier == "Common" then
+                                newModData.itemTier = storedTier
+                                newModData.craftedFromTier = true
                                 
-                                -- Apply the rarity bonuses
-                                if ZItemTiers and ZItemTiers.ApplyRarityBonuses then
-                                    ZItemTiers.ApplyRarityBonuses(newItem, storedRarity)
+                                -- Apply the tier bonuses
+                                if ZItemTiers and ZItemTiers.ApplyTierBonuses then
+                                    ZItemTiers.ApplyTierBonuses(newItem, storedTier)
                                 end
                                 
-                                print("ZItemTiers: [Washing] Preserved rarity " .. storedRarity .. " for washed item: " .. itemType)
+                                print("ZItemTiers: [Washing] Preserved tier " .. storedTier .. " for washed item: " .. itemType)
                                 return true
                             end
                         end
@@ -119,15 +119,15 @@ local function setupWashingHook()
             return false
         end
         
-        -- If item was replaced, find the new item and apply rarity
-        if willBeReplaced and storedRarity and storedReplaceOnUse then
+        -- If item was replaced, find the new item and apply tier
+        if willBeReplaced and storedTier and storedReplaceOnUse then
             -- Try immediately first
-            if not findAndApplyRarity() then
+            if not findAndApplyTier() then
                 -- If not found, use OnTick fallback (item might not be added yet)
                 local ticks = 0
                 Events.OnTick.Add(function()
                     ticks = ticks + 1
-                    if findAndApplyRarity() then
+                    if findAndApplyTier() then
                         return false  -- Remove this event handler
                     end
                     -- Give up after 10 ticks

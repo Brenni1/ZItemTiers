@@ -1,5 +1,5 @@
--- Inventory display for item rarity
--- Changes item text color in inventory panes based on rarity (without affecting icons)
+-- Inventory display for item tier
+-- Changes item text color in inventory panes based on tier (without affecting icons)
 -- Supports CleanUI mod (if CleanUI is active, it handles coloring, so we skip this)
 
 require "ZItemTiers/core"
@@ -27,11 +27,11 @@ if not hasCleanUI and not ISInventoryPane._zItemTiers_hooked then
             for _, v in ipairs(self.items) do
                 if v and v.item then
                     local item = v.item
-                    -- Check if item has rarity
-                    local rarity = ZItemTiers.GetItemRarity(item)
-                    if rarity and rarity ~= "Common" and ZItemTiers and ZItemTiers.Rarities[rarity] then
-                        local rarityData = ZItemTiers.Rarities[rarity]
-                        local color = rarityData.color
+                    -- Check if item has tier
+                    local tier = ZItemTiers.GetItemTier(item)
+                    if tier and tier ~= "Common" and ZItemTiers and ZItemTiers.Tiers[tier] then
+                        local tierData = ZItemTiers.Tiers[tier]
+                        local color = tierData.color
                         
                         local itemName = item:getName(getSpecificPlayer(self.player))
                         -- Map both the item name and the item object
@@ -55,7 +55,7 @@ if not hasCleanUI and not ISInventoryPane._zItemTiers_hooked then
         local selfRef = self
         local originalDrawText = self._zItemTiers_originalDrawText
         self.drawText = function(self, text, x, y, r, g, b, a, font)
-            -- Check if this text matches an item name with rarity
+            -- Check if this text matches an item name with tier
             if selfRef._zItemTiers_colorMap and selfRef._zItemTiers_colorMap[text] then
                 local color = selfRef._zItemTiers_colorMap[text]
                 r, g, b = color.r, color.g, color.b

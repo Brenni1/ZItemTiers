@@ -1,5 +1,5 @@
 -- Weight reduction bonus module
--- Applies rarity-based weight reduction to items (except HandWeapon)
+-- Applies tier-based weight reduction to items (except HandWeapon)
 
 require "ZItemTiers/core"
 

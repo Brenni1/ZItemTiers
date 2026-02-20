@@ -3,13 +3,13 @@
 
 require "ZItemTiers/core"
 
--- Get stored rarity and replaceOnUse from food item
-local function getStoredRarityAndReplace(food, modData)
-    if not modData or not modData.itemRarity then
+-- Get stored tier and replaceOnUse from food item
+local function getStoredTierAndReplace(food, modData)
+    if not modData or not modData.itemTier then
         return nil, nil
     end
     
-    local storedRarity = modData.itemRarity
+    local storedTier = modData.itemTier
     local storedReplaceOnUse = nil
     
     local successGetReplace, replaceOnUse = pcall(function()
@@ -22,17 +22,17 @@ local function getStoredRarityAndReplace(food, modData)
         storedReplaceOnUse = replaceOnUse
     end
     
-    return storedRarity, storedReplaceOnUse
+    return storedTier, storedReplaceOnUse
 end
 
 -- Calculate and apply hunger reduction bonus
-local function applyHungerBonus(food, modData, rarityData)
+local function applyHungerBonus(food, modData, tierData)
     local originalHungChange = modData.itemHungerChangeOriginal
     if originalHungChange >= 0.0 then
         return false
     end
     
-    local tierIndex = rarityData.index
+    local tierIndex = tierData.index
     local multiplier = 1.0 + (tierIndex - 1) * 0.2
     local modifiedHungerChange = originalHungChange * multiplier
     
@@ -65,8 +65,8 @@ local function checkItemStillExists(character, inventoryItem)
     return successContains and contains or false
 end
 
--- Find replacement item in inventory and apply rarity (immediate check)
-local function findAndApplyRarityToReplacement(character, storedReplaceOnUse, storedRarity)
+-- Find replacement item in inventory and apply tier (immediate check)
+local function findAndApplyTierToReplacement(character, storedReplaceOnUse, storedTier)
     local inventory = character:getInventory()
     if not inventory then
         return false
@@ -92,10 +92,10 @@ local function findAndApplyRarityToReplacement(character, storedReplaceOnUse, st
             
             if successType and itemType == storedReplaceOnUse then
                 local itemModData = item:getModData()
-                if itemModData and (not itemModData.itemRarity or itemModData.itemRarity == "Common") then
-                    itemModData.itemRarity = storedRarity
-                    if ZItemTiers and ZItemTiers.ApplyRarityBonuses then
-                        ZItemTiers.ApplyRarityBonuses(item, storedRarity)
+                if itemModData and (not itemModData.itemTier or itemModData.itemTier == "Common") then
+                    itemModData.itemTier = storedTier
+                    if ZItemTiers and ZItemTiers.ApplyTierBonuses then
+                        ZItemTiers.ApplyTierBonuses(item, storedTier)
                     end
                     return true
                 end
@@ -107,12 +107,12 @@ local function findAndApplyRarityToReplacement(character, storedReplaceOnUse, st
 end
 
 -- Find replacement item using OnTick (delayed check)
-local function findReplacementWithOnTick(character, storedReplaceOnUse, storedRarity)
+local function findReplacementWithOnTick(character, storedReplaceOnUse, storedTier)
     local ticksWaited = 0
     Events.OnTick.Add(function()
         ticksWaited = ticksWaited + 1
         
-        if findAndApplyRarityToReplacement(character, storedReplaceOnUse, storedRarity) then
+        if findAndApplyTierToReplacement(character, storedReplaceOnUse, storedTier) then
             return false
         end
         
@@ -123,9 +123,9 @@ local function findReplacementWithOnTick(character, storedReplaceOnUse, storedRa
     end)
 end
 
--- Preserve rarity on replacement item after eating
-local function preserveRarityOnReplacement(character, inventoryItem, storedRarity, storedReplaceOnUse)
-    if not storedRarity or not storedReplaceOnUse then
+-- Preserve tier on replacement item after eating
+local function preserveTierOnReplacement(character, inventoryItem, storedTier, storedReplaceOnUse)
+    if not storedTier or not storedReplaceOnUse then
         return
     end
     
@@ -133,12 +133,12 @@ local function preserveRarityOnReplacement(character, inventoryItem, storedRarit
         return
     end
     
-    if not findAndApplyRarityToReplacement(character, storedReplaceOnUse, storedRarity) then
-        findReplacementWithOnTick(character, storedReplaceOnUse, storedRarity)
+    if not findAndApplyTierToReplacement(character, storedReplaceOnUse, storedTier) then
+        findReplacementWithOnTick(character, storedReplaceOnUse, storedTier)
     end
 end
 
--- Hook into IsoGameCharacter:Eat to apply hunger reduction bonus and preserve rarity on replacement items
+-- Hook into IsoGameCharacter:Eat to apply hunger reduction bonus and preserve tier on replacement items
 if IsoGameCharacter and IsoGameCharacter.Eat then
     local originalEat = IsoGameCharacter.Eat
     function IsoGameCharacter:Eat(inventoryItem, percentage, useUtensil)
@@ -152,16 +152,16 @@ if IsoGameCharacter and IsoGameCharacter.Eat then
             return originalEat(self, inventoryItem, percentage, useUtensil)
         end
         
-        local storedRarity, storedReplaceOnUse = getStoredRarityAndReplace(food, modData)
+        local storedTier, storedReplaceOnUse = getStoredTierAndReplace(food, modData)
             
-        -- Check if this food has rarity and stored original hunger value
-        if modData.itemRarity and modData.itemHungerChangeOriginal then
-            local rarity = modData.itemRarity
-            local rarityData = ZItemTiers.Rarities[rarity]
+        -- Check if this food has tier and stored original hunger value
+        if modData.itemTier and modData.itemHungerChangeOriginal then
+            local tier = modData.itemTier
+            local tierData = ZItemTiers.Tiers[tier]
             
-            if rarityData and applyHungerBonus(food, modData, rarityData) then
+            if tierData and applyHungerBonus(food, modData, tierData) then
                 local result = originalEat(self, inventoryItem, percentage, useUtensil)
-                preserveRarityOnReplacement(self, inventoryItem, storedRarity, storedReplaceOnUse)
+                preserveTierOnReplacement(self, inventoryItem, storedTier, storedReplaceOnUse)
                 return result
             end
         end

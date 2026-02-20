@@ -43,8 +43,8 @@ function get_base_run_speed(item)
     return ZItemTiers.GetBaseRunSpeedModifier(item, item:getModData())
 end
 
--- Apply a rarity to an item and return it
-function apply_rarity(item, rarity)
-    ZItemTiers.ApplyRarityBonuses(item, rarity)
+-- Apply a tier to an item and return it
+function apply_tier(item, tier)
+    ZItemTiers.ApplyTierBonuses(item, tier)
     return item
 end

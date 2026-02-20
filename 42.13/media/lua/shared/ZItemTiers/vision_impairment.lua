@@ -1,5 +1,5 @@
 -- Vision impairment reduction module
--- Applies rarity-based vision impairment reduction to Clothing items
+-- Applies tier-based vision impairment reduction to Clothing items
 
 require "ZItemTiers/core"
 

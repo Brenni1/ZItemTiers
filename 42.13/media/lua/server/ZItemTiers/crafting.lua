@@ -1,31 +1,31 @@
--- Crafting rarity system
--- Implements Factorio-style crafting where output rarity is based on ingredient rarities
+-- Crafting tier system
+-- Implements Factorio-style crafting where output tier is based on ingredient tiers
 -- If all ingredients are Epic, output is at least Epic
--- If ingredients have different rarities, output rarity is based on their ratio/probability
+-- If ingredients have different tiers, output tier is based on their ratio/probability
 
 require "ZItemTiers/core"
 
 -- Ensure ZItemTiers is initialized as a table
 ZItemTiers = ZItemTiers or {}
 
--- Calculate output rarity based on ingredient rarities (Factorio-style)
--- Returns the calculated rarity name
+-- Calculate output tier based on ingredient tiers (Factorio-style)
+-- Returns the calculated tier name
 -- Parameters:
 --   ingredientItems: ArrayList of ingredient items
 --   character: (optional) IsoGameCharacter performing the craft
 --   recipe: (optional) CraftRecipe being performed
 -- Rules:
 -- 1. If all ingredients are Epic, output is at least Epic
--- 2. If ingredients have different rarities, output rarity is based on their ratio/probability
--- 3. Output is always at least the minimum (highest tier) rarity among ingredients
+-- 2. If ingredients have different tiers, output tier is based on their ratio/probability
+-- 3. Output is always at least the minimum (highest tier) tier among ingredients
 -- 4. Skill level affects the result:
 --    - Level 0: 50% chance to be 1 tier lower
 --    - Level 1: Keep calculated tier (no change)
 --    - Level > 1: Small chance (5% per level above 1) to be 1 tier higher
-function ZItemTiers.CalculateCraftingRarity(ingredientItems, character, recipe)
+function ZItemTiers.CalculateCraftingTier(ingredientItems, character, recipe)
     if not ingredientItems or ingredientItems:size() == 0 then
         -- No ingredients, use normal spawn probability
-        return ZItemTiers.RollRarity()
+        return ZItemTiers.RollTier()
     end
     
     -- Get crafting skill level
@@ -75,48 +75,48 @@ function ZItemTiers.CalculateCraftingRarity(ingredientItems, character, recipe)
         print("ZItemTiers: [Crafting] Detected skill level: " .. skillLevel)
     end
     
-    -- Collect rarities from all ingredients
-    local rarityCounts = {}
+    -- Collect tiers from all ingredients
+    local tierCounts = {}
     local totalIngredients = 0
     
     for i = 0, ingredientItems:size() - 1 do
         local ingredient = ingredientItems:get(i)
         if ingredient then
-            local rarity = ZItemTiers.GetItemRarity(ingredient)
-            if rarity then
-                rarityCounts[rarity] = (rarityCounts[rarity] or 0) + 1
+            local tier = ZItemTiers.GetItemTier(ingredient)
+            if tier then
+                tierCounts[tier] = (tierCounts[tier] or 0) + 1
                 totalIngredients = totalIngredients + 1
             end
         end
     end
     
     if totalIngredients == 0 then
-        -- No ingredients with rarity, use normal spawn probability
-        return ZItemTiers.RollRarity()
+        -- No ingredients with tier, use normal spawn probability
+        return ZItemTiers.RollTier()
     end
     
-    -- Find the minimum rarity index (highest tier) among all ingredients
+    -- Find the minimum tier index (highest tier) among all ingredients
     -- This is the "floor" - output will be at least this tier
-    local minRarityIndex = nil
-    for rarityName, count in pairs(rarityCounts) do
-        local rarityData = ZItemTiers.Rarities[rarityName]
-        if rarityData then
-            if minRarityIndex == nil or rarityData.index > minRarityIndex then
-                minRarityIndex = rarityData.index
+    local minTierIndex = nil
+    for tierName, count in pairs(tierCounts) do
+        local tierData = ZItemTiers.Tiers[tierName]
+        if tierData then
+            if minTierIndex == nil or tierData.index > minTierIndex then
+                minTierIndex = tierData.index
             end
         end
     end
     
-    if not minRarityIndex then
+    if not minTierIndex then
         return "Common"
     end
     
-    -- Calculate weighted average of ingredient rarities based on count
+    -- Calculate weighted average of ingredient tiers based on count
     local weightedSum = 0
-    for rarityName, count in pairs(rarityCounts) do
-        local rarityData = ZItemTiers.Rarities[rarityName]
-        if rarityData then
-            weightedSum = weightedSum + (rarityData.index * count)
+    for tierName, count in pairs(tierCounts) do
+        local tierData = ZItemTiers.Tiers[tierName]
+        if tierData then
+            weightedSum = weightedSum + (tierData.index * count)
         end
     end
     local averageIndex = weightedSum / totalIngredients
@@ -124,8 +124,8 @@ function ZItemTiers.CalculateCraftingRarity(ingredientItems, character, recipe)
     -- Round to nearest integer
     local targetIndex = math.floor(averageIndex + 0.5)
     
-    -- Ensure output is at least the minimum rarity tier (Factorio rule: all Epic -> at least Epic)
-    targetIndex = math.max(minRarityIndex, targetIndex)
+    -- Ensure output is at least the minimum tier tier (Factorio rule: all Epic -> at least Epic)
+    targetIndex = math.max(minTierIndex, targetIndex)
     
     -- Debug: log calculation before skill modifiers
     print("ZItemTiers: [Crafting] Calculated targetIndex=" .. targetIndex .. " (skillLevel=" .. skillLevel .. ")")
@@ -159,27 +159,27 @@ function ZItemTiers.CalculateCraftingRarity(ingredientItems, character, recipe)
         print("ZItemTiers: [Crafting] Skill level 1 kept tier at " .. targetIndex .. " (no change)")
     end
     
-    -- Clamp to valid rarity range (1-5)
+    -- Clamp to valid tier range (1-5)
     targetIndex = math.max(1, math.min(5, targetIndex))
     
-    -- Find rarity name by index
-    for rarityName, rarityData in pairs(ZItemTiers.Rarities) do
-        if rarityData.index == targetIndex then
-            return rarityName
+    -- Find tier name by index
+    for tierName, tierData in pairs(ZItemTiers.Tiers) do
+        if tierData.index == targetIndex then
+            return tierName
         end
     end
     
-    -- Fallback: return the minimum rarity
-    for rarityName, rarityData in pairs(ZItemTiers.Rarities) do
-        if rarityData.index == minRarityIndex then
-            return rarityName
+    -- Fallback: return the minimum tier
+    for tierName, tierData in pairs(ZItemTiers.Tiers) do
+        if tierData.index == minTierIndex then
+            return tierName
         end
     end
     
     return "Common"
 end
 
--- Hook into RecipeManager.PerformMakeItem to apply crafting rarity
+-- Hook into RecipeManager.PerformMakeItem to apply crafting tier
 -- We need to intercept the ItemRecipe creation to get the actual source items that will be consumed
 local originalPerformMakeItem = RecipeManager.PerformMakeItem
 RecipeManager.PerformMakeItem = function(recipe, item, character, containers)
@@ -221,61 +221,61 @@ RecipeManager.PerformMakeItem = function(recipe, item, character, containers)
         end
     end
     
-    -- Calculate output rarity BEFORE performing recipe (so we can store it in crafting state)
-    local outputRarity = nil
+    -- Calculate output tier BEFORE performing recipe (so we can store it in crafting state)
+    local outputTier = nil
     if successGet and sourceItems and sourceItems:size() > 0 then
-        outputRarity = ZItemTiers.CalculateCraftingRarity(sourceItems, character, recipe)
+        outputTier = ZItemTiers.CalculateCraftingTier(sourceItems, character, recipe)
         
-        -- Debug: log source items and their rarities
+        -- Debug: log source items and their tiers
         local debugMsg = "ZItemTiers: [PerformMakeItem] Crafting with " .. sourceItems:size() .. " ingredients: "
         for i = 0, sourceItems:size() - 1 do
             local ing = sourceItems:get(i)
             if ing then
-                local rarity = ZItemTiers.GetItemRarity(ing)
+                local tier = ZItemTiers.GetItemTier(ing)
                 local fullType = ing:getFullType()
-                debugMsg = debugMsg .. fullType .. "(" .. rarity .. ") "
+                debugMsg = debugMsg .. fullType .. "(" .. tier .. ") "
             end
         end
         print(debugMsg)
-        print("ZItemTiers: [PerformMakeItem] Calculated output rarity: " .. outputRarity)
+        print("ZItemTiers: [PerformMakeItem] Calculated output tier: " .. outputTier)
         
         -- Store crafting state for Actions.addOrDropItem hook
         if characterId then
             _craftingState[characterId] = {
-                rarity = outputRarity,
+                tier = outputTier,
                 timestamp = getGameTime():getWorldAgeHours() or 0,
                 character = character
             }
-            print("ZItemTiers: [PerformMakeItem] Stored crafting state for character " .. characterId .. " with rarity " .. outputRarity)
+            print("ZItemTiers: [PerformMakeItem] Stored crafting state for character " .. characterId .. " with tier " .. outputTier)
         end
     end
     
     -- Perform the recipe (consumes items, creates outputs)
     local result = originalPerformMakeItem(recipe, item, character, containers)
     
-    -- Apply rarity to created items if we got source items
+    -- Apply tier to created items if we got source items
     -- Note: Some items might be added via Actions.addOrDropItem (which will handle them),
     -- but items returned directly by PerformMakeItem should also be handled here
-    if result and result:size() > 0 and outputRarity then
-        print("ZItemTiers: [PerformMakeItem] Applying rarity to " .. result:size() .. " created items")
+    if result and result:size() > 0 and outputTier then
+        print("ZItemTiers: [PerformMakeItem] Applying tier to " .. result:size() .. " created items")
         
-        -- Apply rarity to all created items
+        -- Apply tier to all created items
         for i = 0, result:size() - 1 do
             local createdItem = result:get(i)
             if createdItem and not ZItemTiers.IsItemBlacklisted(createdItem) then
-                -- Store rarity in modData FIRST to prevent spawn_hooks from overriding it
+                -- Store tier in modData FIRST to prevent spawn_hooks from overriding it
                 local modData = createdItem:getModData()
                 if modData then
-                    modData.itemRarity = outputRarity
-                    modData.craftedFromRarity = true  -- Flag to indicate this was crafted
+                    modData.itemTier = outputTier
+                    modData.craftedFromTier = true  -- Flag to indicate this was crafted
                 end
                 
-                -- Apply the calculated rarity
-                ZItemTiers.ApplyRarityBonuses(createdItem, outputRarity)
+                -- Apply the calculated tier
+                ZItemTiers.ApplyTierBonuses(createdItem, outputTier)
                 
-                -- Verify rarity was applied
-                local verifyRarity = ZItemTiers.GetItemRarity(createdItem)
-                print("ZItemTiers: [PerformMakeItem] Applied rarity " .. outputRarity .. " to crafted item: " .. createdItem:getFullType() .. " (verified: " .. verifyRarity .. ")")
+                -- Verify tier was applied
+                local verifyTier = ZItemTiers.GetItemTier(createdItem)
+                print("ZItemTiers: [PerformMakeItem] Applied tier " .. outputTier .. " to crafted item: " .. createdItem:getFullType() .. " (verified: " .. verifyTier .. ")")
             end
         end
         
@@ -288,7 +288,7 @@ RecipeManager.PerformMakeItem = function(recipe, item, character, containers)
         if result and result:size() > 0 then
             print("ZItemTiers: [PerformMakeItem] WARNING: Could not get source items for crafting. successGet=" .. tostring(successGet) .. ", sourceItems=" .. tostring(sourceItems) .. ", size=" .. (sourceItems and sourceItems:size() or "nil"))
         end
-        -- Clean up crafting state if we couldn't calculate rarity
+        -- Clean up crafting state if we couldn't calculate tier
         if characterId and _craftingState[characterId] then
             _craftingState[characterId] = nil
         end
@@ -298,7 +298,7 @@ RecipeManager.PerformMakeItem = function(recipe, item, character, containers)
 end
 
 -- Track crafting state to catch items created in OnCreate callbacks (like ripClothing)
--- Maps character ID to crafting state (rarity, timestamp)
+-- Maps character ID to crafting state (tier, timestamp)
 -- Expose through ZItemTiers so spawn_hooks can check if crafting is in progress
 ZItemTiers._craftingState = ZItemTiers._craftingState or {}
 local _craftingState = ZItemTiers._craftingState
@@ -344,8 +344,8 @@ if ISHandcraftAction and ISHandcraftAction.performRecipe then
             end
         end
         
-        -- Calculate output rarity BEFORE performing recipe
-        local outputRarity = nil
+        -- Calculate output tier BEFORE performing recipe
+        local outputTier = nil
         if characterId and consumedItems and consumedItems:size() > 0 then
             -- Get recipe from logic for skill level calculation
             local recipe = nil
@@ -366,20 +366,20 @@ if ISHandcraftAction and ISHandcraftAction.performRecipe then
                 print("ZItemTiers: [ISHandcraftAction] WARNING: No logic available for recipe retrieval")
             end
             
-            outputRarity = ZItemTiers.CalculateCraftingRarity(consumedItems, character, recipe)
+            outputTier = ZItemTiers.CalculateCraftingTier(consumedItems, character, recipe)
             
             -- Debug: log consumed items
             local debugMsg = "ZItemTiers: [ISHandcraftAction] Crafting with " .. consumedItems:size() .. " ingredients: "
             for i = 0, consumedItems:size() - 1 do
                 local ing = consumedItems:get(i)
                 if ing then
-                    local rarity = ZItemTiers.GetItemRarity(ing)
+                    local tier = ZItemTiers.GetItemTier(ing)
                     local fullType = ing:getFullType()
-                    debugMsg = debugMsg .. fullType .. "(" .. rarity .. ") "
+                    debugMsg = debugMsg .. fullType .. "(" .. tier .. ") "
                 end
             end
             print(debugMsg)
-            print("ZItemTiers: [ISHandcraftAction] Calculated output rarity: " .. outputRarity)
+            print("ZItemTiers: [ISHandcraftAction] Calculated output tier: " .. outputTier)
             
             -- Get expected output item types from recipe (if available)
             local expectedOutputTypes = {}
@@ -473,28 +473,28 @@ if ISHandcraftAction and ISHandcraftAction.performRecipe then
                 end
             end
             
-            -- Store rarities of consumed items for bundle/unbundle operations
-            local consumedRarities = {}
+            -- Store tiers of consumed items for bundle/unbundle operations
+            local consumedTiers = {}
             if consumedItems then
                 for i = 0, consumedItems:size() - 1 do
                     local consumedItem = consumedItems:get(i)
                     if consumedItem then
-                        -- Check if this is a bundle with stored rarities (unbundling scenario)
+                        -- Check if this is a bundle with stored tiers (unbundling scenario)
                         local consumedModData = consumedItem:getModData()
-                        if consumedModData and consumedModData.bundledRarities then
-                            -- This is a bundle being unbundled - use stored rarities
-                            for _, storedRarity in ipairs(consumedModData.bundledRarities) do
-                                table.insert(consumedRarities, storedRarity)
+                        if consumedModData and consumedModData.bundledTiers then
+                            -- This is a bundle being unbundled - use stored tiers
+                            for _, storedTier in ipairs(consumedModData.bundledTiers) do
+                                table.insert(consumedTiers, storedTier)
                             end
-                            print("ZItemTiers: [ISHandcraftAction] Found bundle with " .. #consumedModData.bundledRarities .. " stored rarities for unbundling")
+                            print("ZItemTiers: [ISHandcraftAction] Found bundle with " .. #consumedModData.bundledTiers .. " stored tiers for unbundling")
                         else
-                            -- Regular item - use its rarity (store ALL rarities including Common)
-                            local itemRarity = ZItemTiers.GetItemRarity(consumedItem)
-                            if itemRarity then
-                                table.insert(consumedRarities, itemRarity)
+                            -- Regular item - use its tier (store ALL tiers including Common)
+                            local itemTier = ZItemTiers.GetItemTier(consumedItem)
+                            if itemTier then
+                                table.insert(consumedTiers, itemTier)
                             else
-                                -- Default to Common if no rarity found
-                                table.insert(consumedRarities, "Common")
+                                -- Default to Common if no tier found
+                                table.insert(consumedTiers, "Common")
                             end
                         end
                     end
@@ -503,12 +503,12 @@ if ISHandcraftAction and ISHandcraftAction.performRecipe then
             
             -- Store crafting state for Actions.addOrDropItem hook and OnContainerUpdate
             _craftingState[characterId] = {
-                rarity = outputRarity,
+                tier = outputTier,
                 timestamp = getGameTime():getWorldAgeHours() or 0,
                 character = character,
                 preCraftItemIds = preCraftItemIds,
                 expectedOutputTypes = expectedOutputTypes,
-                consumedRarities = consumedRarities  -- Store for bundle preservation
+                consumedTiers = consumedTiers  -- Store for bundle preservation
             }
             local itemCount = 0
             for _ in pairs(preCraftItemIds) do
@@ -518,7 +518,7 @@ if ISHandcraftAction and ISHandcraftAction.performRecipe then
             for _ in pairs(expectedOutputTypes) do
                 expectedTypesCount = expectedTypesCount + 1
             end
-            print("ZItemTiers: [ISHandcraftAction] Stored crafting state for character " .. characterId .. " with rarity " .. outputRarity .. " (snapshot: " .. itemCount .. " items, expected outputs: " .. expectedTypesCount .. ")")
+            print("ZItemTiers: [ISHandcraftAction] Stored crafting state for character " .. characterId .. " with tier " .. outputTier .. " (snapshot: " .. itemCount .. " items, expected outputs: " .. expectedTypesCount .. ")")
         end
         
         -- Perform the original recipe (this will call Actions.addOrDropItem)
@@ -544,28 +544,28 @@ if ISHandcraftAction and ISHandcraftAction.performRecipe then
                         local itemType = item:getFullType()
                         local modData = item:getModData()
                         if modData and not ZItemTiers.IsItemBlacklisted(item) then
-                            local currentRarity = modData.itemRarity
-                            local isCrafted = modData.craftedFromRarity == true
+                            local currentTier = modData.itemTier
+                            local isCrafted = modData.craftedFromTier == true
                             
-                            if not currentRarity or (currentRarity == "Common" and not isCrafted) then
-                                print("ZItemTiers: [ISHandcraftAction] Applying rarity " .. state.rarity .. " to created item: " .. itemType .. " (was: " .. tostring(currentRarity) .. ")")
-                                modData.itemRarity = state.rarity
-                                modData.craftedFromRarity = true
+                            if not currentTier or (currentTier == "Common" and not isCrafted) then
+                                print("ZItemTiers: [ISHandcraftAction] Applying tier " .. state.tier .. " to created item: " .. itemType .. " (was: " .. tostring(currentTier) .. ")")
+                                modData.itemTier = state.tier
+                                modData.craftedFromTier = true
                                 
-                                -- If this is a bundle and we have consumed rarities, store them for later restoration
-                                if state.consumedRarities and #state.consumedRarities > 0 then
+                                -- If this is a bundle and we have consumed tiers, store them for later restoration
+                                if state.consumedTiers and #state.consumedTiers > 0 then
                                     if string.find(itemType, "Bundle") then
-                                        modData.bundledRarities = state.consumedRarities
-                                        print("ZItemTiers: [ISHandcraftAction] Stored " .. #state.consumedRarities .. " consumed rarities in bundle modData")
+                                        modData.bundledTiers = state.consumedTiers
+                                        print("ZItemTiers: [ISHandcraftAction] Stored " .. #state.consumedTiers .. " consumed tiers in bundle modData")
                                     end
                                 end
                                 
-                                if ZItemTiers and ZItemTiers.ApplyRarityBonuses then
-                                    ZItemTiers.ApplyRarityBonuses(item, state.rarity)
+                                if ZItemTiers and ZItemTiers.ApplyTierBonuses then
+                                    ZItemTiers.ApplyTierBonuses(item, state.tier)
                                 end
-                                print("ZItemTiers: [ISHandcraftAction] Applied rarity " .. state.rarity .. " to created item: " .. itemType)
+                                print("ZItemTiers: [ISHandcraftAction] Applied tier " .. state.tier .. " to created item: " .. itemType)
                             else
-                                print("ZItemTiers: [ISHandcraftAction] Item already has rarity: " .. tostring(currentRarity) .. " (skipping)")
+                                print("ZItemTiers: [ISHandcraftAction] Item already has tier: " .. tostring(currentTier) .. " (skipping)")
                             end
                         end
                     end
@@ -612,8 +612,8 @@ if ISHandcraftAction and ISHandcraftAction.performRecipe then
                                             end)
                                             
                                             local modData = item:getModData()
-                                            if modData and not modData.craftedFromRarity and not ZItemTiers.IsItemBlacklisted(item) then
-                                                local currentRarity = modData.itemRarity
+                                            if modData and not modData.craftedFromTier and not ZItemTiers.IsItemBlacklisted(item) then
+                                                local currentTier = modData.itemTier
                                                 local isNewItem = false
                                                 if successId and itemId then
                                                     isNewItem = not preCraftItemIds[itemId]
@@ -642,13 +642,13 @@ if ISHandcraftAction and ISHandcraftAction.performRecipe then
                                                         end
                                                     end
                                                     
-                                                    -- Apply rarity if item is new and matches expected output (or if we don't have expected outputs)
+                                                    -- Apply tier if item is new and matches expected output (or if we don't have expected outputs)
                                                     if matchesExpected then
-                                                        print("ZItemTiers: [ISHandcraftAction] OnTick (tick " .. cleanupTicks .. "): Applying rarity " .. state.rarity .. " to new item: " .. itemType .. " (was: " .. tostring(currentRarity) .. ")")
-                                                        modData.itemRarity = state.rarity
-                                                        modData.craftedFromRarity = true
-                                                        if ZItemTiers and ZItemTiers.ApplyRarityBonuses then
-                                                            ZItemTiers.ApplyRarityBonuses(item, state.rarity)
+                                                        print("ZItemTiers: [ISHandcraftAction] OnTick (tick " .. cleanupTicks .. "): Applying tier " .. state.tier .. " to new item: " .. itemType .. " (was: " .. tostring(currentTier) .. ")")
+                                                        modData.itemTier = state.tier
+                                                        modData.craftedFromTier = true
+                                                        if ZItemTiers and ZItemTiers.ApplyTierBonuses then
+                                                            ZItemTiers.ApplyTierBonuses(item, state.tier)
                                                         end
                                                         foundItem = true
                                                         _craftingState[cleanupCharacterId] = nil
@@ -680,7 +680,7 @@ if ISHandcraftAction and ISHandcraftAction.performRecipe then
         return result
     end
     
-    print("ZItemTiers: Hooked ISHandcraftAction:performRecipe for crafting rarity")
+    print("ZItemTiers: Hooked ISHandcraftAction:performRecipe for crafting tier")
 end
 
 -- Hook into Actions.addOrDropItem to catch crafted items
@@ -765,47 +765,47 @@ if originalAddOrDropItem then
                 end
             end
             
-            if matchedState and matchedState.rarity then
+            if matchedState and matchedState.tier then
                     -- Check if item is blacklisted
                     if not ZItemTiers.IsItemBlacklisted(item) then
-                        -- Check if item already has rarity (might have been set by RecipeManager.PerformMakeItem)
+                        -- Check if item already has tier (might have been set by RecipeManager.PerformMakeItem)
                         local modData = item:getModData()
                         if modData then
-                            local currentRarity = modData.itemRarity
-                            local isCrafted = modData.craftedFromRarity == true
+                            local currentTier = modData.itemTier
+                            local isCrafted = modData.craftedFromTier == true
                         
-                        -- Check if we're unbundling (check consumed items for bundles with stored rarities)
-                        local rarityToApply = matchedState.rarity
-                        local unbundleRarityIndex = matchedState._unbundleRarityIndex or 0
+                        -- Check if we're unbundling (check consumed items for bundles with stored tiers)
+                        local tierToApply = matchedState.tier
+                        local unbundleTierIndex = matchedState._unbundleTierIndex or 0
                         
-                        if matchedState.consumedRarities and #matchedState.consumedRarities > 0 then
-                            -- We have stored rarities from consumed items (unbundling scenario)
-                            unbundleRarityIndex = unbundleRarityIndex + 1
-                            if unbundleRarityIndex <= #matchedState.consumedRarities then
-                                rarityToApply = matchedState.consumedRarities[unbundleRarityIndex]
-                                matchedState._unbundleRarityIndex = unbundleRarityIndex
-                                print("ZItemTiers: [addOrDropItem] Unbundling: Using stored rarity " .. rarityToApply .. " (index " .. unbundleRarityIndex .. "/" .. #matchedState.consumedRarities .. ")")
+                        if matchedState.consumedTiers and #matchedState.consumedTiers > 0 then
+                            -- We have stored tiers from consumed items (unbundling scenario)
+                            unbundleTierIndex = unbundleTierIndex + 1
+                            if unbundleTierIndex <= #matchedState.consumedTiers then
+                                tierToApply = matchedState.consumedTiers[unbundleTierIndex]
+                                matchedState._unbundleTierIndex = unbundleTierIndex
+                                print("ZItemTiers: [addOrDropItem] Unbundling: Using stored tier " .. tierToApply .. " (index " .. unbundleTierIndex .. "/" .. #matchedState.consumedTiers .. ")")
                             else
-                                -- Ran out of stored rarities - default to the overall calculated rarity
-                                rarityToApply = matchedState.rarity
-                                print("ZItemTiers: [addOrDropItem] Unbundling: Ran out of stored rarities, falling back to overall rarity: " .. rarityToApply .. " (index " .. unbundleRarityIndex .. " > " .. #matchedState.consumedRarities .. ")")
+                                -- Ran out of stored tiers - default to the overall calculated tier
+                                tierToApply = matchedState.tier
+                                print("ZItemTiers: [addOrDropItem] Unbundling: Ran out of stored tiers, falling back to overall tier: " .. tierToApply .. " (index " .. unbundleTierIndex .. " > " .. #matchedState.consumedTiers .. ")")
                             end
                         end
                             
-                            -- Apply rarity if item doesn't have it yet, or if it's Common (spawn_hooks might have set it)
-                            if not currentRarity or (currentRarity == "Common" and not isCrafted) then
-                            print("ZItemTiers: [addOrDropItem] Applying rarity " .. rarityToApply .. " to crafted item: " .. tostring(itemType) .. " (was: " .. tostring(currentRarity) .. ")")
-                            modData.itemRarity = rarityToApply
-                                modData.craftedFromRarity = true
+                            -- Apply tier if item doesn't have it yet, or if it's Common (spawn_hooks might have set it)
+                            if not currentTier or (currentTier == "Common" and not isCrafted) then
+                            print("ZItemTiers: [addOrDropItem] Applying tier " .. tierToApply .. " to crafted item: " .. tostring(itemType) .. " (was: " .. tostring(currentTier) .. ")")
+                            modData.itemTier = tierToApply
+                                modData.craftedFromTier = true
                                 
-                                -- Apply the calculated rarity bonuses
-                                if ZItemTiers and ZItemTiers.ApplyRarityBonuses then
-                                ZItemTiers.ApplyRarityBonuses(item, rarityToApply)
+                                -- Apply the calculated tier bonuses
+                                if ZItemTiers and ZItemTiers.ApplyTierBonuses then
+                                ZItemTiers.ApplyTierBonuses(item, tierToApply)
                                 end
                                 
-                            print("ZItemTiers: [addOrDropItem] Applied rarity " .. rarityToApply .. " to crafted item: " .. tostring(itemType))
+                            print("ZItemTiers: [addOrDropItem] Applied tier " .. tierToApply .. " to crafted item: " .. tostring(itemType))
                             else
-                                print("ZItemTiers: [addOrDropItem] Item already has rarity: " .. tostring(currentRarity) .. " (skipping)")
+                                print("ZItemTiers: [addOrDropItem] Item already has tier: " .. tostring(currentTier) .. " (skipping)")
                             end
                         else
                             print("ZItemTiers: [addOrDropItem] WARNING: No modData for item: " .. tostring(itemType))
@@ -814,7 +814,7 @@ if originalAddOrDropItem then
                         print("ZItemTiers: [addOrDropItem] Item is blacklisted: " .. tostring(itemType))
                     end
             elseif matchedState then
-                print("ZItemTiers: [addOrDropItem] WARNING: Crafting state exists but no rarity (state: " .. tostring(matchedState) .. ")")
+                print("ZItemTiers: [addOrDropItem] WARNING: Crafting state exists but no tier (state: " .. tostring(matchedState) .. ")")
             end
         end
         
@@ -822,9 +822,9 @@ if originalAddOrDropItem then
         return originalAddOrDropItem(character, item)
     end
     
-    print("ZItemTiers: Hooked Actions.addOrDropItem for crafting rarity")
+    print("ZItemTiers: Hooked Actions.addOrDropItem for crafting tier")
 else
-    print("ZItemTiers: WARNING: Actions.addOrDropItem not found, cannot hook crafting rarity")
+    print("ZItemTiers: WARNING: Actions.addOrDropItem not found, cannot hook crafting tier")
 end
 
 -- Hook into OnContainerUpdate to catch items created in OnCreate callbacks
@@ -882,38 +882,38 @@ local function onContainerUpdateForCrafting(container)
                             
                             local modData = item:getModData()
                             if modData then
-                                local hasRarity = modData.itemRarity ~= nil
-                                local currentRarity = modData.itemRarity or "Common"
-                                local isCrafted = modData.craftedFromRarity == true
+                                local hasTier = modData.itemTier ~= nil
+                                local currentTier = modData.itemTier or "Common"
+                                local isCrafted = modData.craftedFromTier == true
                                 local isBlacklisted = ZItemTiers and ZItemTiers.IsItemBlacklisted and ZItemTiers.IsItemBlacklisted(item) or false
                                 local itemType = item:getFullType()
                                 
-                                -- Apply rarity to new items, or override Common rarity on items created during crafting
-                                -- Be more aggressive: if item has Common rarity and we're in a crafting state, override it
+                                -- Apply tier to new items, or override Common tier on items created during crafting
+                                -- Be more aggressive: if item has Common tier and we're in a crafting state, override it
                                 local shouldApply = false
                                 if isNewItem and not isCrafted and not isBlacklisted then
                                     -- New item created during crafting
                                     shouldApply = true
                                     print("ZItemTiers: [OnContainerUpdate] Detected new item: " .. itemType .. " (isNewItem=true)")
-                                elseif hasRarity and currentRarity == "Common" and not isCrafted and not isBlacklisted then
-                                    -- Item has Common rarity but was created during crafting - override it
+                                elseif hasTier and currentTier == "Common" and not isCrafted and not isBlacklisted then
+                                    -- Item has Common tier but was created during crafting - override it
                                     -- Don't require isNewItem here, as spawn_hooks might have applied Common before we could check
                                     shouldApply = true
-                                    print("ZItemTiers: [OnContainerUpdate] Detected Common item to override: " .. itemType .. " (hasRarity=" .. tostring(hasRarity) .. ", currentRarity=" .. currentRarity .. ")")
+                                    print("ZItemTiers: [OnContainerUpdate] Detected Common item to override: " .. itemType .. " (hasTier=" .. tostring(hasTier) .. ", currentTier=" .. currentTier .. ")")
                                 end
                                 
                                 if shouldApply then
                                     foundNewItems = true
-                                    print("ZItemTiers: [OnContainerUpdate] Applying rarity " .. state.rarity .. " to item: " .. itemType .. " (was: " .. currentRarity .. ")")
-                                    modData.itemRarity = state.rarity
-                                    modData.craftedFromRarity = true
-                                    if ZItemTiers and ZItemTiers.ApplyRarityBonuses then
-                                        ZItemTiers.ApplyRarityBonuses(item, state.rarity)
+                                    print("ZItemTiers: [OnContainerUpdate] Applying tier " .. state.tier .. " to item: " .. itemType .. " (was: " .. currentTier .. ")")
+                                    modData.itemTier = state.tier
+                                    modData.craftedFromTier = true
+                                    if ZItemTiers and ZItemTiers.ApplyTierBonuses then
+                                        ZItemTiers.ApplyTierBonuses(item, state.tier)
                                     end
-                                    print("ZItemTiers: [OnContainerUpdate] Applied rarity " .. state.rarity .. " to OnCreate-crafted item: " .. itemType)
+                                    print("ZItemTiers: [OnContainerUpdate] Applied tier " .. state.tier .. " to OnCreate-crafted item: " .. itemType)
                                 else
                                     -- Debug: log why we didn't apply
-                                    print("ZItemTiers: [OnContainerUpdate] Skipped item: " .. itemType .. " (isNewItem=" .. tostring(isNewItem) .. ", hasRarity=" .. tostring(hasRarity) .. ", currentRarity=" .. tostring(currentRarity) .. ", isCrafted=" .. tostring(isCrafted) .. ", isBlacklisted=" .. tostring(isBlacklisted) .. ")")
+                                    print("ZItemTiers: [OnContainerUpdate] Skipped item: " .. itemType .. " (isNewItem=" .. tostring(isNewItem) .. ", hasTier=" .. tostring(hasTier) .. ", currentTier=" .. tostring(currentTier) .. ", isCrafted=" .. tostring(isCrafted) .. ", isBlacklisted=" .. tostring(isBlacklisted) .. ")")
                                 end
                             end
                         end
@@ -940,7 +940,7 @@ local function onContainerUpdateForCrafting(container)
                             end)
                         end
                     else
-                        print("ZItemTiers: [OnContainerUpdate] No new items found without rarity")
+                        print("ZItemTiers: [OnContainerUpdate] No new items found without tier")
                     end
                 end
                 break  -- Found matching state, no need to check others

@@ -1,5 +1,5 @@
 -- Max encumbrance bonus module
--- Applies rarity-based max encumbrance bonuses to InventoryContainer items
+-- Applies tier-based max encumbrance bonuses to InventoryContainer items
 
 require "ZItemTiers/core"
 

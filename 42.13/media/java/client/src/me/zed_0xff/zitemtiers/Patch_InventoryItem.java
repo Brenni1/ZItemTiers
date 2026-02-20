@@ -7,15 +7,15 @@ import se.krka.kahlua.vm.KahluaTable;
 
 /**
  * Optional Java patches for InventoryItem.
- * This patch applies rarity-based vision impairment reduction to InventoryItem.getVisionModifier().
+ * This patch applies tier-based vision impairment reduction to InventoryItem.getVisionModifier().
  * 
  * If this patch is not loaded, vision impairment reduction will be disabled.
  */
 public class Patch_InventoryItem {
     
     /**
-     * Patch InventoryItem.getVisionModifier() to apply rarity-based vision impairment reduction.
-     * Vision modifier < 1.0 means impairment, so we increase it (make it closer to 1.0) based on rarity.
+     * Patch InventoryItem.getVisionModifier() to apply tier-based vision impairment reduction.
+     * Vision modifier < 1.0 means impairment, so we increase it (make it closer to 1.0) based on tier.
      * Uses OnExit to modify the return value without duplicating the original method logic.
      */
     @Patch(className = "zombie.inventory.InventoryItem", methodName = "getVisionModifier")

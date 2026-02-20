@@ -10,7 +10,7 @@ local vhsPlaybackState = {}
 -- Track which functions have been hooked
 local hookedFunctions = {}
 
--- No longer needed - we store rarity in device modData instead
+-- No longer needed - we store tier in device modData instead
 
 -- Get non-skill codes that should be excluded when detecting skill codes in VHS tapes
 function ZItemTiers.GetNonSkillCodes()
@@ -453,7 +453,7 @@ local function setupCheckPlayerHook()
     hookedFunctions.checkPlayer = true
 end
 
--- Hook into ISRadioAction:performAddMedia to store VHS rarity when inserted
+-- Hook into ISRadioAction:performAddMedia to store VHS tier when inserted
 local function setupAddMediaHook()
     if not ISRadioAction then
         return false
@@ -478,14 +478,14 @@ local function setupAddMediaHook()
             
             if successType and itemType and string.find(itemType, "VHS") then
                 local itemModData = self.secondaryItem:getModData()
-                if itemModData and itemModData.itemRarity then
+                if itemModData and itemModData.itemTier then
                     local deviceModData = getDeviceModData(self.deviceData)
                     if deviceModData then
-                        deviceModData.vhsRarity = itemModData.itemRarity
+                        deviceModData.vhsTier = itemModData.itemTier
                         deviceModData.vhsSkillXpBonus = itemModData.itemVhsSkillXpBonus
                         deviceModData.vhsItemType = itemType
                     else
-                        print("ZItemTiers: [VHS] WARNING: Could not get device modData to store rarity for: " .. itemType)
+                        print("ZItemTiers: [VHS] WARNING: Could not get device modData to store tier for: " .. itemType)
                     end
                 end
             end
@@ -499,7 +499,7 @@ local function setupAddMediaHook()
     return true
 end
 
--- Hook into ISRadioAction:performRemoveMedia to preserve VHS rarity when ejected
+-- Hook into ISRadioAction:performRemoveMedia to preserve VHS tier when ejected
 local function setupRemoveMediaHook()
     if not ISRadioAction then
         return false
@@ -516,8 +516,8 @@ local function setupRemoveMediaHook()
     
     local originalPerformRemoveMedia = ISRadioAction.performRemoveMedia
     function ISRadioAction:performRemoveMedia()
-        -- Get rarity from device modData before removal
-        local storedRarity = nil
+        -- Get tier from device modData before removal
+        local storedTier = nil
         local storedBonus = nil
         local itemType = nil
         local deviceModData = nil
@@ -525,8 +525,8 @@ local function setupRemoveMediaHook()
         if self.deviceData then
             deviceModData = getDeviceModData(self.deviceData)
             
-            if deviceModData and deviceModData.vhsRarity then
-                storedRarity = deviceModData.vhsRarity
+            if deviceModData and deviceModData.vhsTier then
+                storedTier = deviceModData.vhsTier
                 storedBonus = deviceModData.vhsSkillXpBonus
                 itemType = deviceModData.vhsItemType
             end
@@ -583,8 +583,8 @@ local function setupRemoveMediaHook()
             originalPerformRemoveMedia(self)
         end
         
-        -- Restore rarity to newly created item (do this BEFORE clearing device modData)
-        if storedRarity and itemType and string.find(itemType, "VHS") then
+        -- Restore tier to newly created item (do this BEFORE clearing device modData)
+        if storedTier and itemType and string.find(itemType, "VHS") then
             -- If we got the item directly, restore to it immediately (BEFORE spawn_hooks can process it)
             if newlyCreatedItem then
                 local modData = newlyCreatedItem:getModData()
@@ -592,24 +592,24 @@ local function setupRemoveMediaHook()
                     -- Set flag FIRST to prevent spawn_hooks from processing this item
                     modData._vhsRestoring = true
                     
-                    -- Set rarity in modData (override any Common rarity that spawn_hooks might have set)
-                    modData.itemRarity = storedRarity
+                    -- Set tier in modData (override any Common tier that spawn_hooks might have set)
+                    modData.itemTier = storedTier
                     if storedBonus then
                         modData.itemVhsSkillXpBonus = storedBonus
                     end
                     
                     -- Re-apply bonuses
-                    if ZItemTiers and ZItemTiers.ApplyRarityBonuses then
-                        ZItemTiers.ApplyRarityBonuses(newlyCreatedItem, storedRarity)
+                    if ZItemTiers and ZItemTiers.ApplyTierBonuses then
+                        ZItemTiers.ApplyTierBonuses(newlyCreatedItem, storedTier)
                     end
                     
                     -- Mark as restored and remove restoring flag
                     modData._vhsRestored = true
                     modData._vhsRestoring = nil
                     
-                    -- Clear stored rarity from device modData
+                    -- Clear stored tier from device modData
                     if deviceModData then
-                        deviceModData.vhsRarity = nil
+                        deviceModData.vhsTier = nil
                         deviceModData.vhsSkillXpBonus = nil
                         deviceModData.vhsItemType = nil
                     end
@@ -637,28 +637,28 @@ local function setupRemoveMediaHook()
                             
                             if successType and foundType == itemType then
                                 local modData = item:getModData()
-                                if modData and (not modData.itemRarity or modData.itemRarity == "Common") and not modData._vhsRestored then
+                                if modData and (not modData.itemTier or modData.itemTier == "Common") and not modData._vhsRestored then
                                     -- Set flag FIRST to prevent spawn_hooks from processing this item
                                     modData._vhsRestoring = true
                                     
-                                    -- Set rarity in modData
-                                    modData.itemRarity = storedRarity
+                                    -- Set tier in modData
+                                    modData.itemTier = storedTier
                                     if storedBonus then
                                         modData.itemVhsSkillXpBonus = storedBonus
                                     end
                                     
                                     -- Re-apply bonuses
-                                    if ZItemTiers and ZItemTiers.ApplyRarityBonuses then
-                                        ZItemTiers.ApplyRarityBonuses(item, storedRarity)
+                                    if ZItemTiers and ZItemTiers.ApplyTierBonuses then
+                                        ZItemTiers.ApplyTierBonuses(item, storedTier)
                                     end
                                     
                                     -- Mark as restored and remove restoring flag
                                     modData._vhsRestored = true
                                     modData._vhsRestoring = nil
                                     
-                                    -- Clear stored rarity from device modData only after successful restore
+                                    -- Clear stored tier from device modData only after successful restore
                                     if deviceModData then
-                                        deviceModData.vhsRarity = nil
+                                        deviceModData.vhsTier = nil
                                         deviceModData.vhsSkillXpBonus = nil
                                         deviceModData.vhsItemType = nil
                                     end
@@ -694,23 +694,23 @@ local function setupRemoveMediaHook()
                                 
                                 if successType and foundType == itemType then
                                     local modData = item:getModData()
-                                    if modData and (not modData.itemRarity or modData.itemRarity == "Common") and not modData._vhsRestored then
+                                    if modData and (not modData.itemTier or modData.itemTier == "Common") and not modData._vhsRestored then
                                         modData._vhsRestoring = true
-                                        modData.itemRarity = storedRarity
+                                        modData.itemTier = storedTier
                                         if storedBonus then
                                             modData.itemVhsSkillXpBonus = storedBonus
                                         end
                                         
-                                        if ZItemTiers and ZItemTiers.ApplyRarityBonuses then
-                                            ZItemTiers.ApplyRarityBonuses(item, storedRarity)
+                                        if ZItemTiers and ZItemTiers.ApplyTierBonuses then
+                                            ZItemTiers.ApplyTierBonuses(item, storedTier)
                                         end
                                         
                                         modData._vhsRestored = true
                                         modData._vhsRestoring = nil
                                         
-                                        -- Clear stored rarity from device modData
+                                        -- Clear stored tier from device modData
                                         if deviceModData then
-                                            deviceModData.vhsRarity = nil
+                                            deviceModData.vhsTier = nil
                                             deviceModData.vhsSkillXpBonus = nil
                                             deviceModData.vhsItemType = nil
                                         end

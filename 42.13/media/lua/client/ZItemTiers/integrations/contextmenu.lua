@@ -1,7 +1,7 @@
 -- Context menu integration for item comparison
--- This integration ensures items with different rarities are properly compared in context menu tooltips
+-- This integration ensures items with different tiers are properly compared in context menu tooltips
 -- BetterClothingInfo replaces doWearClothingTooltip. We hook into it and ensure it works for items with
--- different rarities even if they have the same getFullType().
+-- different tiers even if they have the same getFullType().
 
 require "ZItemTiers/core"
 
@@ -16,20 +16,20 @@ if ISInventoryPaneContextMenu and ISInventoryPaneContextMenu.doWearClothingToolt
         local replaceItems = originalDoWearClothingTooltip(playerObj, newItem, currentItem, option)
         
         -- BetterClothingInfo's version should work because it uses object references and gets values from instances.
-        -- However, if it returns nil (no tooltip created), we need to check if items have different rarities
+        -- However, if it returns nil (no tooltip created), we need to check if items have different tiers
         -- and create a tooltip ourselves if needed.
         
         -- If replaceItems is nil and option.toolTip is nil, BetterClothingInfo didn't create a tooltip.
         -- This happens when all values are 0 and there are no items to replace.
-        -- But if items have different rarities, they should have different defense values, so this shouldn't happen.
+        -- But if items have different tiers, they should have different defense values, so this shouldn't happen.
         -- However, if BetterClothingInfo is checking getFullType() and skipping the comparison, we need to handle it.
         
         if not replaceItems and not option.toolTip then
-            -- BetterClothingInfo didn't create a tooltip. Check if items have different rarities.
+            -- BetterClothingInfo didn't create a tooltip. Check if items have different tiers.
             -- If they do, we should create a tooltip to show the comparison.
-            local newItemRarity = ZItemTiers.GetItemRarity(newItem)
+            local newItemTier = ZItemTiers.GetItemTier(newItem)
             
-            if newItemRarity and newItem:IsClothing() then
+            if newItemTier and newItem:IsClothing() then
                 -- Get the currently worn item in the same location
                 local wornItems = playerObj:getWornItems()
                 local bodyLocationGroup = wornItems:getBodyLocationGroup()
@@ -42,9 +42,9 @@ if ISInventoryPaneContextMenu and ISInventoryPaneContextMenu.doWearClothingToolt
                     if (newItem:getBodyLocation() == wornItem:getLocation()) or
                        (location ~= "" and bodyLocationGroup:isExclusive(location, wornItem:getLocation())) then
                         if item ~= newItem and item ~= currentItem then
-                            local currentItemRarity = ZItemTiers.GetItemRarity(item)
+                            local currentItemTier = ZItemTiers.GetItemTier(item)
                             
-                            -- If items have different rarities, they should have different defense values
+                            -- If items have different tiers, they should have different defense values
                             -- Create a tooltip to show the comparison
                             local newBiteDefense = newItem:getBiteDefense()
                             local newScratchDefense = newItem:getScratchDefense()

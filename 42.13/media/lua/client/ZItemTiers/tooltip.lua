@@ -1,45 +1,45 @@
--- Tooltip display for item rarity and bonuses
+-- Tooltip display for item tier and bonuses
 -- Core functionality works without Starlit Library or BetterClothingInfo
 
 require "ZItemTiers/core"
 
--- Helper function to check if item has rarity
-local function hasRarity(item)
+-- Helper function to check if item has tier
+local function hasTier(item)
     if not item then return false end
     
     local modData = item:getModData()
-    if modData and modData.itemRarity then
+    if modData and modData.itemTier then
         return true
     end
     
     return false
 end
 
--- Helper function to add rarity information to a tooltip layout
--- Shows rarity for all items that have been assigned a rarity
--- This function is exposed to integration modules via ZItemTiers.addRarityToLayout
-local function addRarityToLayout(item, layout)
+-- Helper function to add tier information to a tooltip layout
+-- Shows tier for all items that have been assigned a tier
+-- This function is exposed to integration modules via ZItemTiers.addTierToLayout
+local function addTierToLayout(item, layout)
     if not item or not layout then 
         return 
     end
     
-    -- Get rarity and bonuses from item
-    local rarity = ZItemTiers.GetItemRarity(item)
+    -- Get tier and bonuses from item
+    local tier = ZItemTiers.GetItemTier(item)
     local itemBonuses = ZItemTiers.GetItemBonuses(item)
     
-    if ZItemTiers and ZItemTiers.Rarities[rarity] then
-        local rarityData = ZItemTiers.Rarities[rarity]
-        local color = rarityData.color
+    if ZItemTiers and ZItemTiers.Tiers[tier] then
+        local tierData = ZItemTiers.Tiers[tier]
+        local color = tierData.color
         
-        -- Add rarity row to tooltip (formatted as key:value pair)
+        -- Add tier row to tooltip (formatted as key:value pair)
         if layout and layout.addItem then
-            local rarityItem = layout:addItem()
-            if rarityItem then
-                if rarityItem.setLabel then
-                    rarityItem:setLabel("Rarity:", color.r, color.g, color.b, 1.0)  -- Rarity color for label
+            local tierItem = layout:addItem()
+            if tierItem then
+                if tierItem.setLabel then
+                    tierItem:setLabel("Tier:", color.r, color.g, color.b, 1.0)  -- Tier color for label
                 end
-                if rarityItem.setValue then
-                    rarityItem:setValue(rarityData.name, color.r, color.g, color.b, 1.0)  -- Rarity color for value
+                if tierItem.setValue then
+                    tierItem:setValue(tierData.name, color.r, color.g, color.b, 1.0)  -- Tier color for value
                 end
             end
         end
@@ -81,12 +81,12 @@ local function addRarityToLayout(item, layout)
     end
 end
 
--- Expose addRarityToLayout to integration modules
-ZItemTiers.addRarityToLayout = addRarityToLayout
+-- Expose addTierToLayout to integration modules
+ZItemTiers.addTierToLayout = addTierToLayout
 
--- Function to add rarity information to a tooltip layout
+-- Function to add tier information to a tooltip layout
 -- This can be called from both Lua (Starlit Library) and Java (patch)
-function ZItemTiers.AddRarityToTooltip(item, tooltipUI, layout)
+function ZItemTiers.AddTierToTooltip(item, tooltipUI, layout)
     -- If layout is nil, try to get it from tooltipUI or create a new one
     if not layout and tooltipUI then
         if tooltipUI.beginLayout then
@@ -98,10 +98,10 @@ function ZItemTiers.AddRarityToTooltip(item, tooltipUI, layout)
     end
     
     if not layout then
-        return  -- Can't add rarity without a layout
+        return  -- Can't add tier without a layout
     end
     
-    addRarityToLayout(item, layout)
+    addTierToLayout(item, layout)
     
     -- If we created a new layout, we need to render it
     -- This is handled by the Java patch for DoTooltipEmbedded
@@ -128,21 +128,21 @@ if not (ZItemTiers and ZItemTiers.BetterClothingInfoActive) then
             -- Call the original render first (this preserves other mods)
             originalISToolTipInvRender(self)
             
-            -- After the original render is complete, append our rarity info
-            -- Only add if item has rarity and we're not in a context menu
+            -- After the original render is complete, append our tier info
+            -- Only add if item has tier and we're not in a context menu
             if self.item and (not ISContextMenu.instance or not ISContextMenu.instance.visibleCheck) then
-                -- Check if item has rarity
-                if hasRarity(self.item) then
+                -- Check if item has tier
+                if hasTier(self.item) then
                     -- Get the current tooltip height to know where to append
                     local currentHeight = self.tooltip:getHeight()
                     
-                    -- Create a new layout section for our rarity info
+                    -- Create a new layout section for our tier info
                     local layout = self.tooltip:beginLayout()
                     if layout then
                         layout:setMinLabelWidth(80)
-                        -- Add our rarity info to this new layout
-                        if ZItemTiers and ZItemTiers.addRarityToLayout then
-                            ZItemTiers.addRarityToLayout(self.item, layout)
+                        -- Add our tier info to this new layout
+                        if ZItemTiers and ZItemTiers.addTierToLayout then
+                            ZItemTiers.addTierToLayout(self.item, layout)
                         end
                         -- Render this layout section starting from the current height
                         local startY = currentHeight > 0 and (currentHeight - self.tooltip.padBottom) or self.tooltip.padTop
@@ -163,6 +163,6 @@ if not (ZItemTiers and ZItemTiers.BetterClothingInfoActive) then
                 end
             end
         end
-        print("ZItemTiers: Hooked into ISToolTipInv:render to append rarity info")
+        print("ZItemTiers: Hooked into ISToolTipInv:render to append tier info")
     end
 end

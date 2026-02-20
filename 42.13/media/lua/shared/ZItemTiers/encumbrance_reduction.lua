@@ -1,5 +1,5 @@
 -- Encumbrance reduction bonus module
--- Applies rarity-based encumbrance reduction to InventoryContainer items
+-- Applies tier-based encumbrance reduction to InventoryContainer items
 
 require "ZItemTiers/core"
 

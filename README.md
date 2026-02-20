@@ -2,11 +2,11 @@
 
 ![ZItemTiers](common/poster.png)
 
-Adds a **probability-based item rarity system** to Project Zomboid. Any item can spawn with any rarity; higher tiers grant stat bonuses.
+Adds a **probability-based item tier system** to Project Zomboid. Any item can spawn with any tier; higher tiers grant stat bonuses.
 
-## Rarities
+## Tiers
 
-| Rarity     | Default chance | Color  |
+| Tier     | Default chance | Color  |
 |-----------|----------------|--------|
 | Common    | 80%            | White  |
 | Uncommon  | 16%            | Green  |
@@ -14,11 +14,11 @@ Adds a **probability-based item rarity system** to Project Zomboid. Any item can
 | Epic      | 0.64%          | Purple |
 | Legendary | 0.16%          | Gold   |
 
-Probabilities are configurable in `core.lua` (`ZItemTiers.RarityProbabilities`).
+Probabilities are configurable in `core.lua` (`ZItemTiers.TierProbabilities`).
 
-## Bonuses by Rarity
+## Bonuses by Tier
 
-Higher rarities improve items that support the stat (e.g. weapons get damage, clothing gets defense).
+Higher tiers improve items that support the stat (e.g. weapons get damage, clothing gets defense).
 
 - **Weapons:** Damage multiplier, weight reduction (with Java patch)
 - **Clothing:** Bite/scratch defense, run speed, vision/hearing impairment reduction
@@ -28,14 +28,14 @@ Higher rarities improve items that support the stat (e.g. weapons get damage, cl
 - **Flashlights:** Lower battery consumption
 - **Food:** Better hunger reduction (Uncommon+)
 
-Common items have no bonuses. Exact values are in `42.13/media/lua/shared/ZItemTiers/core.lua` under `ZItemTiers.RarityBonuses`.
+Common items have no bonuses. Exact values are in `42.13/media/lua/shared/ZItemTiers/core.lua` under `ZItemTiers.TierBonuses`.
 
 ## Crafting
 
-Crafted output rarity is derived from **ingredient rarities** (Factorio-style):
+Crafted output tier is derived from **ingredient tiers** (Factorio-style):
 
 - Output is at least the **minimum (highest) tier** among ingredients.
-- Mixed rarities use a weighted/probability result.
+- Mixed tiers use a weighted/probability result.
 - Crafting skill can nudge the result (e.g. small chance to go one tier higher at higher skill).
 
 ## Requirements & Optional
@@ -49,7 +49,7 @@ Crafted output rarity is derived from **ingredient rarities** (Factorio-style):
 
 - **Better Clothing Info** – bonus display in clothing UI
 - **CleanUI** – load order
-- **Context Menu** – rarity in context menus
+- **Context Menu** – tier in context menus
 - **Starlit** – detailed tooltip bonuses
 
 ## Installation

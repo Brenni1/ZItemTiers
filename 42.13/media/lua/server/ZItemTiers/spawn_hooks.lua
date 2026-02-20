@@ -1,12 +1,12 @@
--- Item spawning and rarity application hooks
+-- Item spawning and tier application hooks
 -- Hooks into item creation events (OnFillContainer, OnContainerUpdate, OnGameStart)
--- to apply rarity-based bonuses when items are spawned or loaded from save
+-- to apply tier-based bonuses when items are spawned or loaded from save
 
 require "ZItemTiers/core"
 
--- Helper function to apply rarity to an item if it doesn't already have one
--- If the item already has rarity, re-apply bonuses (useful for migration/fixes)
-local function applyRarityToItem(item, forceReapply)
+-- Helper function to apply tier to an item if it doesn't already have one
+-- If the item already has tier, re-apply bonuses (useful for migration/fixes)
+local function applyTierToItem(item, forceReapply)
     if not item or not item.getModData then return end
     
     local itemType = nil
@@ -17,7 +17,7 @@ local function applyRarityToItem(item, forceReapply)
     
     -- Debug logging for gas cans
     if itemType and (string.find(itemType, "PetrolCan") or string.find(itemType, "GasCan")) then
-        print("ZItemTiers: [DEBUG] applyRarityToItem called for " .. itemType)
+        print("ZItemTiers: [DEBUG] applyTierToItem called for " .. itemType)
     end
     
     -- Safely get modData
@@ -29,15 +29,15 @@ local function applyRarityToItem(item, forceReapply)
         return 
     end
     
-    -- Skip items that were crafted with rarity (they already have their rarity set)
-    if modData.craftedFromRarity then
+    -- Skip items that were crafted with tier (they already have their tier set)
+    if modData.craftedFromTier then
         if itemType and (string.find(itemType, "PetrolCan") or string.find(itemType, "GasCan")) then
-            print("ZItemTiers: [DEBUG] Skipping " .. itemType .. " - crafted from rarity")
+            print("ZItemTiers: [DEBUG] Skipping " .. itemType .. " - crafted from tier")
         end
         return
     end
     
-    -- Skip VHS items that are being restored from ejection (to prevent overriding restored rarity)
+    -- Skip VHS items that are being restored from ejection (to prevent overriding restored tier)
     if modData._vhsRestored or modData._vhsRestoring then
         if itemType and string.find(itemType, "VHS") then
             print("ZItemTiers: [VHS] Skipping " .. itemType .. " - VHS being restored from ejection")
@@ -52,7 +52,7 @@ local function applyRarityToItem(item, forceReapply)
     end
     
     -- Skip items that might be in the crafting process (check if crafting state exists)
-    -- This prevents spawn_hooks from applying Common rarity to items that are about to get crafting rarity
+    -- This prevents spawn_hooks from applying Common tier to items that are about to get crafting tier
     if ZItemTiers and ZItemTiers._craftingState then
         -- Check if any character is currently crafting (items might be created soon)
         local hasActiveCrafting = false
@@ -62,39 +62,39 @@ local function applyRarityToItem(item, forceReapply)
                 break
             end
         end
-        -- If there's active crafting, skip applying rarity to new items (let crafting hook handle it)
-        -- Only skip if the item was created very recently (has no rarity yet)
-        if hasActiveCrafting and not modData.itemRarity then
-            -- Skip this item temporarily - crafting hook will apply rarity within a few ticks
-            -- This prevents spawn_hooks from applying Common rarity before crafting hook applies Epic/Legendary/etc
+        -- If there's active crafting, skip applying tier to new items (let crafting hook handle it)
+        -- Only skip if the item was created very recently (has no tier yet)
+        if hasActiveCrafting and not modData.itemTier then
+            -- Skip this item temporarily - crafting hook will apply tier within a few ticks
+            -- This prevents spawn_hooks from applying Common tier before crafting hook applies Epic/Legendary/etc
             print("ZItemTiers: [spawn_hooks] Skipping " .. tostring(itemType) .. " - crafting in progress (will be handled by crafting hook)")
             return
         end
     end
     
-    local rarity = nil
+    local tier = nil
     
-    -- Check if item already has rarity
-    if modData.itemRarity then
+    -- Check if item already has tier
+    if modData.itemTier then
         if forceReapply then
             -- Re-apply bonuses for existing items (for migration/fixes)
-            rarity = modData.itemRarity
+            tier = modData.itemTier
             if isVHS then
-                print("ZItemTiers: [VHS] Re-applying bonuses for " .. itemType .. " (existing rarity: " .. tostring(rarity) .. ")")
+                print("ZItemTiers: [VHS] Re-applying bonuses for " .. itemType .. " (existing tier: " .. tostring(tier) .. ")")
             end
         else
-            -- Item already has rarity and we're not forcing re-apply, skip
+            -- Item already has tier and we're not forcing re-apply, skip
             if isVHS then
-                print("ZItemTiers: [VHS] " .. itemType .. " already has rarity: " .. tostring(modData.itemRarity) .. ", skipping")
+                print("ZItemTiers: [VHS] " .. itemType .. " already has tier: " .. tostring(modData.itemTier) .. ", skipping")
             end
             return
         end
     else
-        -- Item doesn't have rarity, roll for it
-        if ZItemTiers and ZItemTiers.RollRarity then
-            rarity = ZItemTiers.RollRarity()
+        -- Item doesn't have tier, roll for it
+        if ZItemTiers and ZItemTiers.RollTier then
+            tier = ZItemTiers.RollTier()
             if isVHS then
-                print("ZItemTiers: [VHS] Rolled rarity for " .. itemType .. ": " .. tostring(rarity))
+                print("ZItemTiers: [VHS] Rolled tier for " .. itemType .. ": " .. tostring(tier))
             end
         end
     end
@@ -107,29 +107,29 @@ local function applyRarityToItem(item, forceReapply)
         return
     end
     
-    if rarity then
-        -- Apply rarity bonuses to all items (not just items with specific properties)
-        if ZItemTiers and ZItemTiers.ApplyRarityBonuses then
+    if tier then
+        -- Apply tier bonuses to all items (not just items with specific properties)
+        if ZItemTiers and ZItemTiers.ApplyTierBonuses then
             if isVHS then
-                print("ZItemTiers: [VHS] Calling ApplyRarityBonuses for " .. itemType .. " with rarity " .. tostring(rarity))
+                print("ZItemTiers: [VHS] Calling ApplyTierBonuses for " .. itemType .. " with tier " .. tostring(tier))
             end
             local success13 = pcall(function() 
-                ZItemTiers.ApplyRarityBonuses(item, rarity)
+                ZItemTiers.ApplyTierBonuses(item, tier)
             end)
             if not success13 then
                 if isVHS then
-                    print("ZItemTiers: [VHS] ERROR: ApplyRarityBonuses failed for " .. itemType)
+                    print("ZItemTiers: [VHS] ERROR: ApplyTierBonuses failed for " .. itemType)
                 end
             end
         end
     else
         if isVHS then
-            print("ZItemTiers: [VHS] No rarity for " .. itemType .. ", skipping bonus application")
+            print("ZItemTiers: [VHS] No tier for " .. itemType .. ", skipping bonus application")
         end
     end
 end
 
--- Hook into OnFillContainer event to apply rarity bonuses when items are spawned
+-- Hook into OnFillContainer event to apply tier bonuses when items are spawned
 -- Event signature: (roomName, containerType, itemContainer)
 -- This fires during world generation when containers are filled
 local function onFillContainer(roomName, containerType, itemContainer)
@@ -164,7 +164,7 @@ local function onFillContainer(roomName, containerType, itemContainer)
         end)
         
         if successGet and item then
-            applyRarityToItem(item)
+            applyTierToItem(item)
         end
     end
 end
@@ -172,7 +172,7 @@ end
 -- Hook into OnFillContainer event
 Events.OnFillContainer.Add(onFillContainer)
 
--- Helper function to re-apply weight reduction and run speed modifier to items that have rarity but lost their bonuses
+-- Helper function to re-apply weight reduction and run speed modifier to items that have tier but lost their bonuses
 -- This happens when items are loaded from save (load() resets customWeight to false, run speed modifier might get reset)
 -- For HandWeapon items, damage is applied from Lua, weight is handled by Java patch if available
 local function reapplyBonusesIfNeeded(item)
@@ -181,7 +181,7 @@ local function reapplyBonusesIfNeeded(item)
     local success, modData = pcall(function() return item:getModData() end)
     if not success or not modData then return end
     
-    if modData.itemRarity then
+    if modData.itemTier then
         -- Check if this is a HandWeapon
         local isHandWeapon = false
         local successWeapon, resultWeapon = pcall(function()
@@ -269,7 +269,7 @@ local function reapplyBonusesIfNeeded(item)
             end
             
             -- Check run speed modifier (for all clothing items with run speed modifiers)
-            -- Also check if item has rarity but no run speed modifier bonus stored (needs initial application)
+            -- Also check if item has tier but no run speed modifier bonus stored (needs initial application)
             local isClothing = false
             local successClothing, resultClothing = pcall(function()
                 return instanceof(item, "Clothing")
@@ -284,12 +284,12 @@ local function reapplyBonusesIfNeeded(item)
                 
                 -- Check if item has a non-default run speed modifier
                 if math.abs(baseRunSpeedMod - 1.0) > 0.001 then
-                    -- If item has rarity but no run speed modifier bonus stored, it needs initial application
-                    local rarity = modData.itemRarity
-                    if rarity and rarity ~= "Common" then
-                        local bonuses = ZItemTiers and ZItemTiers.RarityBonuses and ZItemTiers.RarityBonuses[rarity]
+                    -- If item has tier but no run speed modifier bonus stored, it needs initial application
+                    local tier = modData.itemTier
+                    if tier and tier ~= "Common" then
+                        local bonuses = ZItemTiers and ZItemTiers.TierBonuses and ZItemTiers.TierBonuses[tier]
                         if bonuses and bonuses.runSpeedModifier and not modData.itemRunSpeedModifierBonus then
-                            -- Item has rarity but run speed modifier wasn't applied yet
+                            -- Item has tier but run speed modifier wasn't applied yet
                             needsReapply = true
                         elseif modData.itemRunSpeedModifierBonus then
                             -- Check if run speed modifier needs re-application
@@ -316,7 +316,7 @@ local function reapplyBonusesIfNeeded(item)
             end
             
             -- Check bite and scratch defense bonuses
-            -- Also check if item has rarity but no defense bonuses stored (needs initial application)
+            -- Also check if item has tier but no defense bonuses stored (needs initial application)
             local isClothing = false
             local successClothing, resultClothing = pcall(function()
                 return instanceof(item, "Clothing")
@@ -355,9 +355,9 @@ local function reapplyBonusesIfNeeded(item)
                     baseScratchDefense = scratchBaseValue
                 end
                 
-                local rarity = modData.itemRarity
-                if rarity and rarity ~= "Common" then
-                    local bonuses = ZItemTiers and ZItemTiers.RarityBonuses and ZItemTiers.RarityBonuses[rarity]
+                local tier = modData.itemTier
+                if tier and tier ~= "Common" then
+                    local bonuses = ZItemTiers and ZItemTiers.TierBonuses and ZItemTiers.TierBonuses[tier]
                     if bonuses then
                         -- Check if item needs initial defense bonus application (only if item has defense)
                         if (bonuses.biteDefenseBonus and baseBiteDefense > 0 and not modData.itemBiteDefenseBonus) or
@@ -456,7 +456,7 @@ local function reapplyBonusesIfNeeded(item)
             
             -- Check max encumbrance bonus (for InventoryContainer items)
             -- Note: This is handled by Java patch at runtime, but we should ensure modData has the bonus stored
-            if modData.itemRarity and modData.itemRarity ~= "Common" then
+            if modData.itemTier and modData.itemTier ~= "Common" then
                 local isContainer = false
                 local successContainer, resultContainer = pcall(function()
                     return instanceof(item, "InventoryContainer")
@@ -476,12 +476,12 @@ local function reapplyBonusesIfNeeded(item)
                     
                     if successGet and maxItemSize and maxItemSize > 0 then
                         -- Check if bonus should be stored but isn't
-                        local rarity = modData.itemRarity
-                        local bonuses = ZItemTiers and ZItemTiers.RarityBonuses and ZItemTiers.RarityBonuses[rarity]
+                        local tier = modData.itemTier
+                        local bonuses = ZItemTiers and ZItemTiers.TierBonuses and ZItemTiers.TierBonuses[tier]
                         if bonuses and bonuses.maxEncumbranceBonus and not modData.itemMaxEncumbranceBonus then
                             -- Bonus is missing, needs reapplication
                             needsReapply = true
-                            print("ZItemTiers: Max encumbrance bonus missing for " .. rarity .. " container, will reapply")
+                            print("ZItemTiers: Max encumbrance bonus missing for " .. tier .. " container, will reapply")
                         end
                     end
                 end
@@ -537,10 +537,10 @@ local function reapplyBonusesIfNeeded(item)
                         end
                     end
                 else
-                    -- Check if bonus should be stored but isn't (for drainable items with rarity)
-                    local rarity = modData.itemRarity
-                    if rarity and rarity ~= "Common" then
-                        local bonuses = ZItemTiers and ZItemTiers.RarityBonuses and ZItemTiers.RarityBonuses[rarity]
+                    -- Check if bonus should be stored but isn't (for drainable items with tier)
+                    local tier = modData.itemTier
+                    if tier and tier ~= "Common" then
+                        local bonuses = ZItemTiers and ZItemTiers.TierBonuses and ZItemTiers.TierBonuses[tier]
                         if bonuses and bonuses.drainableCapacityBonus then
                             local isDrainable = false
                             local successDrainable, resultDrainable = pcall(function()
@@ -564,10 +564,10 @@ local function reapplyBonusesIfNeeded(item)
             
             if needsReapply then
                 -- Re-apply all bonuses
-                local rarity = modData.itemRarity
-                if ZItemTiers and ZItemTiers.ApplyRarityBonuses then
+                local tier = modData.itemTier
+                if ZItemTiers and ZItemTiers.ApplyTierBonuses then
                     pcall(function()
-                        ZItemTiers.ApplyRarityBonuses(item, rarity)
+                        ZItemTiers.ApplyTierBonuses(item, tier)
                     end)
                 end
             end
@@ -592,7 +592,7 @@ local function processSquareWorldItems(square)
                 end)
                 local itemTypeStr = successGetType and itemType or "unknown"
                 print("ZItemTiers: [DEBUG] Checking world item: " .. itemTypeStr)
-                applyRarityToItem(item, true) -- Force re-apply bonuses (for items loaded from save)
+                applyTierToItem(item, true) -- Force re-apply bonuses (for items loaded from save)
                 reapplyBonusesIfNeeded(item)
             end
         end
@@ -619,13 +619,13 @@ local function processContainerItems(container)
             end)
             local itemTypeStr = successGetType and itemType or "unknown"
             print("ZItemTiers: [DEBUG] Checking item: " .. itemTypeStr)
-            applyRarityToItem(item, true) -- Force re-apply bonuses (for items loaded from save)
+            applyTierToItem(item, true) -- Force re-apply bonuses (for items loaded from save)
             reapplyBonusesIfNeeded(item)
         end
     end
 end
 
--- Hook into OnContainerUpdate to apply rarity to items when containers are accessed/updated
+-- Hook into OnContainerUpdate to apply tier to items when containers are accessed/updated
 -- This catches items when:
 -- - Player opens a container (loot window)
 -- - Items are added/removed from containers
@@ -699,9 +699,9 @@ if originalRefreshContainer then
                 for i = 0, items:size() - 1 do
                     local item = items:get(i)
                     if item then
-                        -- Check if item has rarity but bonuses might not be applied
+                        -- Check if item has tier but bonuses might not be applied
                         local successModData, modData = pcall(function() return item:getModData() end)
-                        if successModData and modData and modData.itemRarity then
+                        if successModData and modData and modData.itemTier then
                             -- Force re-apply bonuses to ensure they're all applied
                             reapplyBonusesIfNeeded(item)
                         end
@@ -754,12 +754,12 @@ end
 -- Hook into OnGameStart event for migration
 Events.OnGameStart.Add(onGameStart)
 
--- Hook into ISRemoveSheetAction to apply rarity to produced sheets
+-- Hook into ISRemoveSheetAction to apply tier to produced sheets
 if ISRemoveSheetAction and ISRemoveSheetAction.complete then
     local originalRemoveSheetComplete = ISRemoveSheetAction.complete
     function ISRemoveSheetAction:complete()
-        -- Try to get the curtain's rarity before removing it
-        local curtainRarity = nil
+        -- Try to get the curtain's tier before removing it
+        local curtainTier = nil
         local curtainItem = nil
         
         -- Check if self.item is an IsoCurtain or has curtains
@@ -775,14 +775,14 @@ if ISRemoveSheetAction and ISRemoveSheetAction.complete then
                 end
             end
             
-            -- Try to get rarity from curtain's modData
+            -- Try to get tier from curtain's modData
             if curtainItem and curtainItem.getModData then
                 local successGetModData, modData = pcall(function()
                     return curtainItem:getModData()
                 end)
-                if successGetModData and modData and modData.itemRarity then
-                    curtainRarity = modData.itemRarity
-                    print("ZItemTiers: [RemoveCurtain] Found curtain rarity: " .. curtainRarity)
+                if successGetModData and modData and modData.itemTier then
+                    curtainTier = modData.itemTier
+                    print("ZItemTiers: [RemoveCurtain] Found curtain tier: " .. curtainTier)
                 end
             end
         end
@@ -792,7 +792,7 @@ if ISRemoveSheetAction and ISRemoveSheetAction.complete then
         
         -- Use OnTick to check for the sheet after a short delay (item might be added asynchronously)
         local character = self.character
-        local storedRarity = curtainRarity  -- Store for use in OnTick handler
+        local storedTier = curtainTier  -- Store for use in OnTick handler
         local checkTicks = 0
         local maxTicks = 3  -- Check for 3 ticks
         Events.OnTick.Add(function()
@@ -802,7 +802,7 @@ if ISRemoveSheetAction and ISRemoveSheetAction.complete then
                 return false  -- Remove this event handler
             end
             
-            -- Apply rarity to the sheet that was just added to inventory
+            -- Apply tier to the sheet that was just added to inventory
             if character and character.getInventory then
                 local successGetInv, inv = pcall(function()
                     return character:getInventory()
@@ -814,7 +814,7 @@ if ISRemoveSheetAction and ISRemoveSheetAction.complete then
                     end)
                     
                     if successGetItems and items then
-                        -- Find a sheet without rarity
+                        -- Find a sheet without tier
                         for i = 0, items:size() - 1 do
                             local item = items:get(i)
                             if item and not ZItemTiers.IsItemBlacklisted(item) then
@@ -828,23 +828,23 @@ if ISRemoveSheetAction and ISRemoveSheetAction.complete then
                                 if itemType and (itemType == "Base.Sheet" or string.find(itemType, "Sheet")) then
                                     local modData = item:getModData()
                                     if modData then
-                                        local currentRarity = modData.itemRarity
+                                        local currentTier = modData.itemTier
                                         
-                                        -- Apply rarity if sheet doesn't have one yet
-                                        if not currentRarity then
-                                            -- Use stored rarity from curtain if available, otherwise roll new one
-                                            local rarity = storedRarity or ZItemTiers.RollRarity()
-                                            modData.itemRarity = rarity
+                                        -- Apply tier if sheet doesn't have one yet
+                                        if not currentTier then
+                                            -- Use stored tier from curtain if available, otherwise roll new one
+                                            local tier = storedTier or ZItemTiers.RollTier()
+                                            modData.itemTier = tier
                                             
-                                            -- Apply the rarity bonuses
-                                            if ZItemTiers and ZItemTiers.ApplyRarityBonuses then
-                                                ZItemTiers.ApplyRarityBonuses(item, rarity)
+                                            -- Apply the tier bonuses
+                                            if ZItemTiers and ZItemTiers.ApplyTierBonuses then
+                                                ZItemTiers.ApplyTierBonuses(item, tier)
                                             end
                                             
-                                            if storedRarity then
-                                                print("ZItemTiers: [RemoveCurtain] Preserved rarity " .. rarity .. " from curtain to produced sheet: " .. itemType)
+                                            if storedTier then
+                                                print("ZItemTiers: [RemoveCurtain] Preserved tier " .. tier .. " from curtain to produced sheet: " .. itemType)
                                             else
-                                                print("ZItemTiers: [RemoveCurtain] Applied rarity " .. rarity .. " to produced sheet: " .. itemType)
+                                                print("ZItemTiers: [RemoveCurtain] Applied tier " .. tier .. " to produced sheet: " .. itemType)
                                             end
                                             return false  -- Found and applied, remove handler
                                         end
@@ -860,15 +860,15 @@ if ISRemoveSheetAction and ISRemoveSheetAction.complete then
         end)
     end
     
-    print("ZItemTiers: Hooked ISRemoveSheetAction:complete for sheet rarity")
+    print("ZItemTiers: Hooked ISRemoveSheetAction:complete for sheet tier")
 end
 
--- Hook into ISAddSheetAction to preserve sheet rarity when creating curtains
+-- Hook into ISAddSheetAction to preserve sheet tier when creating curtains
 if ISAddSheetAction and ISAddSheetAction.complete then
     local originalAddSheetComplete = ISAddSheetAction.complete
     function ISAddSheetAction:complete()
-        -- Get the sheet's rarity before it's removed from inventory
-        local sheetRarity = nil
+        -- Get the sheet's tier before it's removed from inventory
+        local sheetTier = nil
         if self.character and self.character.getInventory then
             local successGetInv, inv = pcall(function()
                 return self.character:getInventory()
@@ -883,9 +883,9 @@ if ISAddSheetAction and ISAddSheetAction.complete then
                     local successGetModData, modData = pcall(function()
                         return sheet:getModData()
                     end)
-                    if successGetModData and modData and modData.itemRarity then
-                        sheetRarity = modData.itemRarity
-                        print("ZItemTiers: [AddCurtain] Found sheet rarity: " .. sheetRarity)
+                    if successGetModData and modData and modData.itemTier then
+                        sheetTier = modData.itemTier
+                        print("ZItemTiers: [AddCurtain] Found sheet tier: " .. sheetTier)
                     end
                 end
             end
@@ -894,11 +894,11 @@ if ISAddSheetAction and ISAddSheetAction.complete then
         -- Call original complete method (this will remove the sheet and create the curtain)
         originalAddSheetComplete(self)
         
-        -- Apply the sheet's rarity to the newly created curtain
-        if sheetRarity and self.item then
+        -- Apply the sheet's tier to the newly created curtain
+        if sheetTier and self.item then
             -- Use OnTick to check for the curtain after a short delay
             local windowItem = self.item
-            local storedRarity = sheetRarity
+            local storedTier = sheetTier
             local checkTicks = 0
             local maxTicks = 3
             Events.OnTick.Add(function()
@@ -939,12 +939,12 @@ if ISAddSheetAction and ISAddSheetAction.complete then
                                                 return obj:getModData()
                                             end)
                                             if successGetModData and modData then
-                                                local currentRarity = modData.itemRarity
+                                                local currentTier = modData.itemTier
                                                 
-                                                -- Apply rarity if curtain doesn't have one yet
-                                                if not currentRarity then
-                                                    modData.itemRarity = storedRarity
-                                                    print("ZItemTiers: [AddCurtain] Preserved rarity " .. storedRarity .. " from sheet to curtain")
+                                                -- Apply tier if curtain doesn't have one yet
+                                                if not currentTier then
+                                                    modData.itemTier = storedTier
+                                                    print("ZItemTiers: [AddCurtain] Preserved tier " .. storedTier .. " from sheet to curtain")
                                                     return false  -- Found and applied, remove handler
                                                 end
                                             end
@@ -961,5 +961,5 @@ if ISAddSheetAction and ISAddSheetAction.complete then
         end
     end
     
-    print("ZItemTiers: Hooked ISAddSheetAction:complete for curtain rarity")
+    print("ZItemTiers: Hooked ISAddSheetAction:complete for curtain tier")
 end

@@ -1,5 +1,5 @@
 -- Drainable capacity bonus module
--- Applies rarity-based capacity bonuses to Drainable items (liquid containers)
+-- Applies tier-based capacity bonuses to Drainable items (liquid containers)
 
 require "ZItemTiers/core"
 

@@ -7,8 +7,8 @@ ZItemTiers = ZItemTiers or {}
 function ZItemTiers.GetItemBonuses(item)
     if not item then return {} end
     
-    local rarity = ZItemTiers.GetItemRarity(item)
-    local bonuses = ZItemTiers.RarityBonuses[rarity]
+    local tier = ZItemTiers.GetItemTier(item)
+    local bonuses = ZItemTiers.TierBonuses[tier]
     if not bonuses then return {} end
     
     -- Convert to list format for display

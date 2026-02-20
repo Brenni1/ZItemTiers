@@ -32,44 +32,44 @@ local successBCI, resultBCI = pcall(function()
 end)
 
 if hasBetterClothingInfo and _G and _G.DoTooltipClothing and DrawItem and SetItemInfoAsText then
-    -- Hook into SetItemInfoAsText to apply custom colors for Rarity and Bonuses
+    -- Hook into SetItemInfoAsText to apply custom colors for Tier and Bonuses
     local originalSetItemInfoAsText = _G.SetItemInfoAsText
     if originalSetItemInfoAsText then
         function _G.SetItemInfoAsText(newItemValue, label, layoutItem, layoutTooltip)
             local item = ZItemTiers._currentItemForTooltip
-            local rarityColor = nil
+            local tierColor = nil
             local displayValue = newItemValue
             
             if item then
                 local modData = item:getModData()
-                if modData and modData.itemRarity and ZItemTiers.Rarities and ZItemTiers.Rarities[modData.itemRarity] then
-                    rarityColor = ZItemTiers.Rarities[modData.itemRarity].color
+                if modData and modData.itemTier and ZItemTiers.Tiers and ZItemTiers.Tiers[modData.itemTier] then
+                    tierColor = ZItemTiers.Tiers[modData.itemTier].color
                 end
             end
             
-            -- Apply custom color if label is "Rarity" or empty (bonus rows)
-            if rarityColor and (label == "Rarity" or label == "") then
+            -- Apply custom color if label is "Tier" or empty (bonus rows)
+            if tierColor and (label == "Tier" or label == "") then
                 -- Extract just the display value (remove the item type and ID suffix we added for uniqueness)
-                -- Format: "RarityName_ItemType_ItemID" -> "RarityName"
+                -- Format: "TierName_ItemType_ItemID" -> "TierName"
                 -- Or: "BonusText_ItemType_ItemID_BonusType" -> "BonusText"
                 if string.find(newItemValue, "_") then
                     displayValue = string.match(newItemValue, "^([^_]+)")
                 end
                 
                 layoutItem = layoutTooltip:addItem()
-                if label == "Rarity" then
-                    layoutItem:setLabel(getText(label) .. ":", rarityColor.r, rarityColor.g, rarityColor.b, 1.0)
+                if label == "Tier" then
+                    layoutItem:setLabel(getText(label) .. ":", tierColor.r, tierColor.g, tierColor.b, 1.0)
                 else
                     -- Empty label for bonus rows
-                    layoutItem:setLabel("", rarityColor.r, rarityColor.g, rarityColor.b, 1.0)
+                    layoutItem:setLabel("", tierColor.r, tierColor.g, tierColor.b, 1.0)
                 end
-                layoutItem:setValue(displayValue, rarityColor.r, rarityColor.g, rarityColor.b, 1.0)
+                layoutItem:setValue(displayValue, tierColor.r, tierColor.g, tierColor.b, 1.0)
             else
                 -- Call original SetItemInfoAsText
                 originalSetItemInfoAsText(newItemValue, label, layoutItem, layoutTooltip)
             end
         end
-        print("ZItemTiers: Patched SetItemInfoAsText for custom rarity colors")
+        print("ZItemTiers: Patched SetItemInfoAsText for custom tier colors")
     end
     
     -- BetterClothingInfo is active - hook into its DoTooltipClothing function
@@ -80,31 +80,31 @@ if hasBetterClothingInfo and _G and _G.DoTooltipClothing and DrawItem and SetIte
             -- Store the current item for SetItemInfoAsText to access
             ZItemTiers._currentItemForTooltip = item
             
-            -- Get rarity and bonuses once
-            local rarity = ZItemTiers.GetItemRarity(item)
+            -- Get tier and bonuses once
+            local tier = ZItemTiers.GetItemTier(item)
             local itemBonuses = ZItemTiers.GetItemBonuses(item)
-            local rarityData = nil
-            local rarityName = nil
+            local tierData = nil
+            local tierName = nil
             
-            if rarity and ZItemTiers.Rarities and ZItemTiers.Rarities[rarity] then
-                rarityData = ZItemTiers.Rarities[rarity]
-                rarityName = rarityData.name
+            if tier and ZItemTiers.Tiers and ZItemTiers.Tiers[tier] then
+                tierData = ZItemTiers.Tiers[tier]
+                tierName = tierData.name
             end
             
             -- Call the original BetterClothingInfo function first
             originalDoTooltipClothing(objTooltip, item, layoutTooltip)
             
-            -- Add our rarity info using the same DrawItem pattern as BetterClothingInfo
-            if ZItemTiers and item and layoutTooltip and DrawItem and rarityData and rarityName then
+            -- Add our tier info using the same DrawItem pattern as BetterClothingInfo
+            if ZItemTiers and item and layoutTooltip and DrawItem and tierData and tierName then
                     
-                    -- Create DrawItem for rarity using the same pattern as BetterClothingInfo
-                    -- Include rarity in the item value to ensure items with different rarities are treated as different items
+                    -- Create DrawItem for tier using the same pattern as BetterClothingInfo
+                    -- Include tier in the item value to ensure items with different tiers are treated as different items
                     -- This prevents BetterClothingInfo from skipping comparison when comparing Rare vs Common items
-                    local rarityItemValue = rarityName .. "_" .. tostring(item:getFullType()) .. "_" .. tostring(item:getID())
-                    local rarityDrawItem = DrawItem:New(
-                        rarityItemValue,  -- newItemValue: string (includes rarity + item type + ID to make it unique)
+                    local tierItemValue = tierName .. "_" .. tostring(item:getFullType()) .. "_" .. tostring(item:getID())
+                    local tierDrawItem = DrawItem:New(
+                        tierItemValue,  -- newItemValue: string (includes tier + item type + ID to make it unique)
                         nil,              -- icon
-                        "Rarity",         -- label
+                        "Tier",         -- label
                         nil,              -- layoutItem
                         layoutTooltip,    -- layoutTooltip
                         nil,
@@ -112,9 +112,9 @@ if hasBetterClothingInfo and _G and _G.DoTooltipClothing and DrawItem and SetIte
                         nil
                     )
                     
-                    -- Render the rarity DrawItem
-                    if rarityDrawItem and rarityDrawItem.Render then
-                        rarityDrawItem:Render(true)
+                    -- Render the tier DrawItem
+                    if tierDrawItem and tierDrawItem.Render then
+                        tierDrawItem:Render(true)
                     end
                     
                     -- Create a separate DrawItem for each bonus (one row per bonus)
