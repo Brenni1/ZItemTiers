@@ -672,8 +672,24 @@ function ZItemTiers.ApplyTierBonuses(item, tier)
     -- Future bonuses can be added here following the same pattern
 end
 
--- Get tier for an item
-function ZItemTiers.GetItemTier(item)
+-- Get the 1-based index of the tier for an item, 1 = Common, 2 = Uncommon, ...
+---@param item InventoryItem
+---@return number
+function ZItemTiers.GetItemTierIndex(item)
+    if not item then return ZItemTiers.CommonIdx end
+    
+    local modData = item:getModData()
+    if not modData or not modData.itemTier then
+        return ZItemTiers.CommonIdx
+    end
+
+    return ZItemTiers.Tiers[modData.itemTier].index
+end
+
+-- Get tier key for an item (returns "Common" if no tier assigned or item is nil)
+---@param item InventoryItem
+---@return string
+function ZItemTiers.GetItemTierKey(item)
     if not item then return "Common" end
     
     local modData = item:getModData()
@@ -681,7 +697,7 @@ function ZItemTiers.GetItemTier(item)
         return "Common"
     end
     
-    return modData.itemTier
+    return modData.itemTier or "Common"
 end
 
 -- Get bonuses for an item (for display purposes)

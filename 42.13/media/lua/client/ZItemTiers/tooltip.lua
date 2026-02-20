@@ -24,7 +24,7 @@ local function addTierToLayout(item, layout)
     end
     
     -- Get tier and bonuses from item
-    local tier = ZItemTiers.GetItemTier(item)
+    local tier = ZItemTiers.GetItemTierKey(item)
     local itemBonuses = ZItemTiers.GetItemBonuses(item)
     
     if ZItemTiers and ZItemTiers.Tiers[tier] then

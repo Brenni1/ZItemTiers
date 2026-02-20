@@ -27,7 +27,7 @@ if ISInventoryPaneContextMenu and ISInventoryPaneContextMenu.doWearClothingToolt
         if not replaceItems and not option.toolTip then
             -- BetterClothingInfo didn't create a tooltip. Check if items have different tiers.
             -- If they do, we should create a tooltip to show the comparison.
-            local newItemTier = ZItemTiers.GetItemTier(newItem)
+            local newItemTier = ZItemTiers.GetItemTierKey(newItem)
             
             if newItemTier and newItem:IsClothing() then
                 -- Get the currently worn item in the same location
@@ -42,7 +42,7 @@ if ISInventoryPaneContextMenu and ISInventoryPaneContextMenu.doWearClothingToolt
                     if (newItem:getBodyLocation() == wornItem:getLocation()) or
                        (location ~= "" and bodyLocationGroup:isExclusive(location, wornItem:getLocation())) then
                         if item ~= newItem and item ~= currentItem then
-                            local currentItemTier = ZItemTiers.GetItemTier(item)
+                            local currentItemTier = ZItemTiers.GetItemTierKey(item)
                             
                             -- If items have different tiers, they should have different defense values
                             -- Create a tooltip to show the comparison

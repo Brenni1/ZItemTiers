@@ -82,7 +82,7 @@ function ZItemTiers.CalculateCraftingTier(ingredientItems, character, recipe)
     for i = 0, ingredientItems:size() - 1 do
         local ingredient = ingredientItems:get(i)
         if ingredient then
-            local tier = ZItemTiers.GetItemTier(ingredient)
+            local tier = ZItemTiers.GetItemTierKey(ingredient)
             if tier then
                 tierCounts[tier] = (tierCounts[tier] or 0) + 1
                 totalIngredients = totalIngredients + 1
@@ -231,7 +231,7 @@ RecipeManager.PerformMakeItem = function(recipe, item, character, containers)
         for i = 0, sourceItems:size() - 1 do
             local ing = sourceItems:get(i)
             if ing then
-                local tier = ZItemTiers.GetItemTier(ing)
+                local tier = ZItemTiers.GetItemTierKey(ing)
                 local fullType = ing:getFullType()
                 debugMsg = debugMsg .. fullType .. "(" .. tier .. ") "
             end
@@ -274,7 +274,7 @@ RecipeManager.PerformMakeItem = function(recipe, item, character, containers)
                 ZItemTiers.ApplyTierBonuses(createdItem, outputTier)
                 
                 -- Verify tier was applied
-                local verifyTier = ZItemTiers.GetItemTier(createdItem)
+                local verifyTier = ZItemTiers.GetItemTierKey(createdItem)
                 print("ZItemTiers: [PerformMakeItem] Applied tier " .. outputTier .. " to crafted item: " .. createdItem:getFullType() .. " (verified: " .. verifyTier .. ")")
             end
         end
@@ -373,7 +373,7 @@ if ISHandcraftAction and ISHandcraftAction.performRecipe then
             for i = 0, consumedItems:size() - 1 do
                 local ing = consumedItems:get(i)
                 if ing then
-                    local tier = ZItemTiers.GetItemTier(ing)
+                    local tier = ZItemTiers.GetItemTierKey(ing)
                     local fullType = ing:getFullType()
                     debugMsg = debugMsg .. fullType .. "(" .. tier .. ") "
                 end
@@ -489,7 +489,7 @@ if ISHandcraftAction and ISHandcraftAction.performRecipe then
                             print("ZItemTiers: [ISHandcraftAction] Found bundle with " .. #consumedModData.bundledTiers .. " stored tiers for unbundling")
                         else
                             -- Regular item - use its tier (store ALL tiers including Common)
-                            local itemTier = ZItemTiers.GetItemTier(consumedItem)
+                            local itemTier = ZItemTiers.GetItemTierKey(consumedItem)
                             if itemTier then
                                 table.insert(consumedTiers, itemTier)
                             else

@@ -24,7 +24,7 @@ public class Patch_HandWeapon {
         try {
             Object zItemTiers = LuaManager.env.rawget("ZItemTiers");
             if (zItemTiers instanceof KahluaTable) {
-                Object getItemTier = ((KahluaTable) zItemTiers).rawget("GetItemTier");
+                Object getItemTier = ((KahluaTable) zItemTiers).rawget("GetItemTierKey");
                 if (getItemTier != null) {
                     Object tierName = LuaManager.caller.protectedCall(LuaManager.thread, getItemTier, weapon);
                     if (tierName == null) {

@@ -185,7 +185,7 @@ local function setupMoveableBreakChanceHook()
                         end)
                         
                         if successGet and item then
-                            local tier = ZItemTiers.GetItemTier(item)
+                            local tier = ZItemTiers.GetItemTierKey(item)
                             if tier then
                                 local tierData = ZItemTiers.Tiers[tier]
                                 if tierData then
@@ -203,7 +203,7 @@ local function setupMoveableBreakChanceHook()
             
             -- Apply reduction if we found a tool with tier
             if bestTool and bestTierIndex > 1 then
-                local tier = ZItemTiers.GetItemTier(bestTool)
+                local tier = ZItemTiers.GetItemTierKey(bestTool)
                 print("ZItemTiers: [Moveable] Best tool found: " .. tostring(bestTool:getFullType()) .. " (tier: " .. tostring(tier) .. ", tier: " .. bestTierIndex .. ")")
                 
                 local reduction = (bestTierIndex - 1) * 5
@@ -266,7 +266,7 @@ local function setupMoveableBreakChanceHook()
                         end)
                         
                         if successGet and item then
-                            local tier = ZItemTiers.GetItemTier(item)
+                            local tier = ZItemTiers.GetItemTierKey(item)
                             if tier then
                                 local tierData = ZItemTiers.Tiers[tier]
                                 if tierData then
@@ -285,7 +285,7 @@ local function setupMoveableBreakChanceHook()
         
         -- If we found a tool with tier, apply the reduction
         if bestTool and bestTierIndex > 1 then
-            local tier = ZItemTiers.GetItemTier(bestTool)
+            local tier = ZItemTiers.GetItemTierKey(bestTool)
             print("ZItemTiers: [Moveable] Best tool found: " .. tostring(bestTool:getFullType()) .. " (tier: " .. tostring(tier) .. ", tier: " .. bestTierIndex .. ")")
             
             -- Reduce break chance by 5% per tier (tier 2 = -5%, tier 3 = -10%, etc.)

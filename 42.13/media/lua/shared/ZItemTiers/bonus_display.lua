@@ -7,7 +7,7 @@ ZItemTiers = ZItemTiers or {}
 function ZItemTiers.GetItemBonuses(item)
     if not item then return {} end
     
-    local tier = ZItemTiers.GetItemTier(item)
+    local tier = ZItemTiers.GetItemTierKey(item)
     local bonuses = ZItemTiers.TierBonuses[tier]
     if not bonuses then return {} end
     

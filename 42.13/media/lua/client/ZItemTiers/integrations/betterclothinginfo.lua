@@ -81,7 +81,7 @@ if hasBetterClothingInfo and _G and _G.DoTooltipClothing and DrawItem and SetIte
             ZItemTiers._currentItemForTooltip = item
             
             -- Get tier and bonuses once
-            local tier = ZItemTiers.GetItemTier(item)
+            local tier = ZItemTiers.GetItemTierKey(item)
             local itemBonuses = ZItemTiers.GetItemBonuses(item)
             local tierData = nil
             local tierName = nil

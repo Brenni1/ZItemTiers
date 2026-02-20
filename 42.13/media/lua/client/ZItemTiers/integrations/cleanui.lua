@@ -35,7 +35,7 @@ if hasCleanUI and _G and _G.CleanUI_getItemNameColor then
             
             if currentItem then
                 -- Check if item has tier
-                local tier = ZItemTiers.GetItemTier(currentItem)
+                local tier = ZItemTiers.GetItemTierKey(currentItem)
                 
                 if tier and ZItemTiers and ZItemTiers.Tiers and ZItemTiers.Tiers[tier] then
                     local tierData = ZItemTiers.Tiers[tier]
@@ -147,7 +147,7 @@ if hasCleanUI and _G and _G.CleanUI_getItemNameColor then
                                 -- Only process each unique item once
                                 if itemId and not seenItems[itemId] then
                                     seenItems[itemId] = true
-                                    local tier = ZItemTiers and ZItemTiers.GetItemTier and ZItemTiers.GetItemTier(item) or "Common"
+                                    local tier = ZItemTiers and ZItemTiers.GetItemTierKey and ZItemTiers.GetItemTierKey(item) or "Common"
                                     if not itemsByTier[tier] then
                                         itemsByTier[tier] = {}
                                         tiers[#tiers + 1] = tier
@@ -164,7 +164,7 @@ if hasCleanUI and _G and _G.CleanUI_getItemNameColor then
                                     end
                                     if not found then
                                         seenItems[item] = true
-                                        local tier = ZItemTiers and ZItemTiers.GetItemTier and ZItemTiers.GetItemTier(item) or "Common"
+                                        local tier = ZItemTiers and ZItemTiers.GetItemTierKey and ZItemTiers.GetItemTierKey(item) or "Common"
                                         if not itemsByTier[tier] then
                                             itemsByTier[tier] = {}
                                             tiers[#tiers + 1] = tier

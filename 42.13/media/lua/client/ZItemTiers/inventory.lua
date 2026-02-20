@@ -28,7 +28,7 @@ if not hasCleanUI and not ISInventoryPane._zItemTiers_hooked then
                 if v and v.item then
                     local item = v.item
                     -- Check if item has tier
-                    local tier = ZItemTiers.GetItemTier(item)
+                    local tier = ZItemTiers.GetItemTierKey(item)
                     if tier and tier ~= "Common" and ZItemTiers and ZItemTiers.Tiers[tier] then
                         local tierData = ZItemTiers.Tiers[tier]
                         local color = tierData.color
