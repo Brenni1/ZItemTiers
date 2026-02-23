@@ -673,6 +673,8 @@ function ZItemTiers.ApplyTierBonuses(item, tier)
 end
 
 -- Get the 1-based index of the tier for an item, 1 = Common, 2 = Uncommon, ...
+-- guaranteed to return a number between 1 and 5
+-- (used by ZGlassCutter and ZSpaceship))
 ---@param item InventoryItem
 ---@return number
 function ZItemTiers.GetItemTierIndex(item)
@@ -683,7 +685,13 @@ function ZItemTiers.GetItemTierIndex(item)
         return ZItemTiers.CommonIdx
     end
 
-    return ZItemTiers.Tiers[modData.itemTier].index
+    local tier = ZItemTiers.Tiers[modData.itemTier]
+    if not tier then return ZItemTiers.CommonIdx end
+
+    local result = tier.index
+    if type(result) ~= "number" then return ZItemTiers.CommonIdx end
+
+    return result
 end
 
 -- Get tier key for an item (returns "Common" if no tier assigned or item is nil)
