@@ -1,6 +1,8 @@
 -- Reduce break chance when picking up moveables with higher tier instruments
 -- Reduces break chance by 5% per tier (Uncommon: -5%, Rare: -10%, Epic: -15%, Legendary: -20%)
 
+--[[
+
 require "ZItemTiers/core"
 
 -- Track if hook is already set up
@@ -323,3 +325,4 @@ Events.OnGameBoot.Add(function()
         end)
     end
 end)
+]]
