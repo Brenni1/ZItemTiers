@@ -15,19 +15,9 @@ local function applyTierToItem(item, forceReapply)
         itemType = typeValue
     end
     
-    -- Debug logging for gas cans
-    if itemType and (string.find(itemType, "PetrolCan") or string.find(itemType, "GasCan")) then
-        print("ZItemTiers: [DEBUG] applyTierToItem called for " .. itemType)
-    end
-    
     -- Safely get modData
-    local success, modData = pcall(function() return item:getModData() end)
-    if not success or not modData then 
-        if itemType and (string.find(itemType, "PetrolCan") or string.find(itemType, "GasCan")) then
-            print("ZItemTiers: [DEBUG] No modData for " .. itemType)
-        end
-        return 
-    end
+    local modData = item:getModData()
+    if not modData then return end
     
     -- Skip items that were crafted with tier (they already have their tier set)
     if modData.craftedFromTier then
@@ -37,19 +27,19 @@ local function applyTierToItem(item, forceReapply)
         return
     end
     
-    -- Skip VHS items that are being restored from ejection (to prevent overriding restored tier)
-    if modData._vhsRestored or modData._vhsRestoring then
-        if itemType and string.find(itemType, "VHS") then
-            print("ZItemTiers: [VHS] Skipping " .. itemType .. " - VHS being restored from ejection")
-        end
-        return
-    end
-    
-    -- Check if this is a VHS item for logging
-    local isVHS = false
-    if itemType and string.find(itemType, "VHS") then
-        isVHS = true
-    end
+--    -- Skip VHS items that are being restored from ejection (to prevent overriding restored tier)
+--    if modData._vhsRestored or modData._vhsRestoring then
+--        if itemType and string.find(itemType, "VHS") then
+--            print("ZItemTiers: [VHS] Skipping " .. itemType .. " - VHS being restored from ejection")
+--        end
+--        return
+--    end
+--    
+--    -- Check if this is a VHS item for logging
+--    local isVHS = false
+--    if itemType and string.find(itemType, "VHS") then
+--        isVHS = true
+--    end
     
     -- Skip items that might be in the crafting process (check if crafting state exists)
     -- This prevents spawn_hooks from applying Common tier to items that are about to get crafting tier
@@ -91,12 +81,7 @@ local function applyTierToItem(item, forceReapply)
         end
     else
         -- Item doesn't have tier, roll for it
-        if ZItemTiers and ZItemTiers.RollTier then
-            tier = ZItemTiers.RollTier()
-            if isVHS then
-                print("ZItemTiers: [VHS] Rolled tier for " .. itemType .. ": " .. tostring(tier))
-            end
-        end
+        tier = ZItemTiers.RollTier()
     end
     
     -- Skip blacklisted items (keys, ID cards, etc.)
@@ -132,38 +117,19 @@ end
 -- Hook into OnFillContainer event to apply tier bonuses when items are spawned
 -- Event signature: (roomName, containerType, itemContainer)
 -- This fires during world generation when containers are filled
+--
+-- OnFillContainer( "producestorage", "crate",            ItemContainer:[type:crate, parent:null:carpentry_01_16:carpentry_01_16:zombie.iso.IsoObject@31c97c77] )
+-- OnFillContainer( "Container",      "ProduceBox_Large", zombie.inventory.ItemPickerJava$ItemPickerContainer@7e8c9851 )
 local function onFillContainer(roomName, containerType, itemContainer)
     if not itemContainer then return end
+    if not instanceof(itemContainer, "ItemContainer") then return end
     
-    -- Safely get items from container (some container types don't have getItems())
-    -- ItemPickerContainer doesn't support getItems(), so we need to catch the error
-    local success, items = pcall(function()
-        -- Try to call getItems() - will fail for ItemPickerContainer
-        return itemContainer:getItems()
-    end)
+    local items = itemContainer.getItems and itemContainer:getItems()
+    if not items then return end
     
-    -- If getItems() failed or returned nil, this container type doesn't support it
-    if not success or not items then return end
-    
-    -- Process all items in the container
-    local successSize, size = pcall(function()
-        if items.size then
-            return items:size()
-        end
-        return 0
-    end)
-    
-    if not successSize or not size or size == 0 then return end
-    
-    for i = 0, size - 1 do
-        local successGet, item = pcall(function()
-            if items.get then
-                return items:get(i)
-            end
-            return nil
-        end)
-        
-        if successGet and item then
+    for i = 0, items:size() - 1 do
+        local item = items:get(i)
+        if item then
             applyTierToItem(item)
         end
     end
@@ -178,8 +144,8 @@ Events.OnFillContainer.Add(onFillContainer)
 local function reapplyBonusesIfNeeded(item)
     if not item or not item.getModData then return end
     
-    local success, modData = pcall(function() return item:getModData() end)
-    if not success or not modData then return end
+    local modData = item:getModData()
+    if not modData then return end
     
     if modData.itemTier then
         -- Check if this is a HandWeapon
@@ -606,10 +572,8 @@ local function processContainerItems(container)
     -- Check if container has getItems method
     if not container.getItems then return end
     
-    local successGetItems, items = pcall(function()
-        return container:getItems()
-    end)
-    if not successGetItems or not items then return end
+    local items = container:getItems()
+    if not items then return end
     
     for i = 0, items:size() - 1 do
         local item = items:get(i)
@@ -700,8 +664,8 @@ if originalRefreshContainer then
                     local item = items:get(i)
                     if item then
                         -- Check if item has tier but bonuses might not be applied
-                        local successModData, modData = pcall(function() return item:getModData() end)
-                        if successModData and modData and modData.itemTier then
+                        local modData = item:getModData()
+                        if modData and modData.itemTier then
                             -- Force re-apply bonuses to ensure they're all applied
                             reapplyBonusesIfNeeded(item)
                         end
