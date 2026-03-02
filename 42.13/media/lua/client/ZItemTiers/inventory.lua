@@ -5,14 +5,7 @@
 require "ZItemTiers/core"
 
 -- Check if CleanUI is active - if so, skip this hook (CleanUI handles it)
-local hasCleanUI = false
-local successCleanUI = pcall(function()
-    if _G and _G.CleanUI_getItemNameColor then
-        hasCleanUI = true
-        return true
-    end
-    return false
-end)
+local hasCleanUI = _G and _G.CleanUI_getItemNameColor ~= nil
 
 -- Only hook if CleanUI is not active
 if not hasCleanUI and not ISInventoryPane._zItemTiers_hooked then
@@ -81,19 +74,9 @@ if originalSetNewContainer then
         local result = originalSetNewContainer(self, inventory)
         
         -- Check if this is the floor container (world items on the ground)
-        if inventory then
-            local successGetType, containerType = pcall(function()
-                return inventory:getType()
-            end)
-            if successGetType and containerType == "floor" then
-                -- Trigger OnContainerUpdate for the floor container
-                -- This will cause the server-side OnContainerUpdate hook to process world items
-                -- Use LuaEventManager to trigger the event
-                local successTrigger = pcall(function()
-                    if LuaEventManager then
-                        LuaEventManager.triggerEvent("OnContainerUpdate", inventory)
-                    end
-                end)
+        if inventory and inventory:getType() == "floor" then
+            if LuaEventManager then
+                LuaEventManager.triggerEvent("OnContainerUpdate", inventory)
             end
         end
         

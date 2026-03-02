@@ -16,14 +16,7 @@ if not ZItemTiers._cleanui_currentItem then
 end
 
 -- Check if CleanUI mod is active
-local hasCleanUI = false
-local successCleanUI, resultCleanUI = pcall(function()
-    if _G and _G.CleanUI_getItemNameColor then
-        hasCleanUI = true
-        return true
-    end
-    return false
-end)
+local hasCleanUI = _G and _G.CleanUI_getItemNameColor ~= nil
 
 if hasCleanUI and _G and _G.CleanUI_getItemNameColor then
     -- Hook into CleanUI_getItemNameColor to return tier colors

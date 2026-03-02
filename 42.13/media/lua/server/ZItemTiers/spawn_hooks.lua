@@ -9,11 +9,7 @@ require "ZItemTiers/core"
 local function applyTierToItem(item, forceReapply)
     if not item or not item.getModData then return end
     
-    local itemType = nil
-    local successType, typeValue = pcall(function() return item:getFullType() end)
-    if successType and typeValue then
-        itemType = typeValue
-    end
+    local itemType = item:getFullType()
     
     -- Safely get modData
     local modData = item:getModData()
@@ -98,14 +94,7 @@ local function applyTierToItem(item, forceReapply)
             if isVHS then
                 print("ZItemTiers: [VHS] Calling ApplyTierBonuses for " .. itemType .. " with tier " .. tostring(tier))
             end
-            local success13 = pcall(function() 
-                ZItemTiers.ApplyTierBonuses(item, tier)
-            end)
-            if not success13 then
-                if isVHS then
-                    print("ZItemTiers: [VHS] ERROR: ApplyTierBonuses failed for " .. itemType)
-                end
-            end
+            ZItemTiers.ApplyTierBonuses(item, tier)
         end
     else
         if isVHS then
@@ -148,16 +137,7 @@ local function reapplyBonusesIfNeeded(item)
     if not modData then return end
     
     if modData.itemTier then
-        -- Check if this is a HandWeapon
-        local isHandWeapon = false
-        local successWeapon, resultWeapon = pcall(function()
-            return instanceof(item, "HandWeapon")
-        end)
-        if successWeapon and resultWeapon then
-            isHandWeapon = true
-        end
-        
-        if isHandWeapon then
+        if instanceof(item, "HandWeapon") then
             -- For HandWeapon items:
             -- - Damage is applied directly from Lua (setMinDamage/setMaxDamage)
             -- - Weight is handled by Java patch if available, otherwise skipped
@@ -168,83 +148,26 @@ local function reapplyBonusesIfNeeded(item)
             local needsReapply = false
             
             -- Check encumbrance reduction (for containers)
-            if modData.itemEncumbranceReduction then
-                local isContainer = false
-                local successContainer, resultContainer = pcall(function()
-                    return instanceof(item, "InventoryContainer")
-                end)
-                if successContainer and resultContainer then
-                    isContainer = true
-                end
-                
-                if isContainer then
-                    -- Get base encumbrance reduction from script item
-                    local baseEncumbranceReduction = 0
-                    local successGetBase, baseValue = pcall(function()
-                        if item.getScriptItem then
-                            local scriptItem = item:getScriptItem()
-                            if scriptItem and scriptItem.weightReduction then
-                                return scriptItem.weightReduction
-                            end
-                        end
-                        return 0
-                    end)
-                    if successGetBase and baseValue then
-                        baseEncumbranceReduction = baseValue
-                    end
-                    
-                    local successGet, currentEncumbranceReduction = pcall(function()
-                        if item.getWeightReduction then
-                            return item:getWeightReduction()
-                        end
-                        return baseEncumbranceReduction
-                    end)
-                    
-                    if successGet then
-                        -- Calculate expected encumbrance reduction (additive, flat value)
-                        local expectedValue = math.min(baseEncumbranceReduction + modData.itemEncumbranceReduction, 85)
-                        if math.abs((currentEncumbranceReduction or baseEncumbranceReduction) - expectedValue) > 0.01 then
-                            needsReapply = true
-                        end
-                    end
+            if modData.itemEncumbranceReduction and instanceof(item, "InventoryContainer") then
+                local zit = modData.ZIT and modData.ZIT.baseValues
+                local baseEncumbranceReduction = (zit and zit.encumbranceReductionBase) or (item.getWeightReduction and item:getWeightReduction()) or 0
+                local currentEncumbranceReduction = item.getWeightReduction and item:getWeightReduction() or baseEncumbranceReduction
+                local expectedValue = math.min(baseEncumbranceReduction + modData.itemEncumbranceReduction, 85)
+                if math.abs((currentEncumbranceReduction or baseEncumbranceReduction) - expectedValue) > 0.01 then
+                    needsReapply = true
                 end
             end
             
             -- Check weight reduction (for non-container items)
-            if modData.itemWeightReduction then
-                local isContainer = false
-                local successContainer, resultContainer = pcall(function()
-                    return instanceof(item, "InventoryContainer")
-                end)
-                if successContainer and resultContainer then
-                    isContainer = true
-                end
-                
-                if not isContainer then
-                    -- For regular items, check custom weight flag
-                    local successCheck, isCustom = pcall(function()
-                        if item.isCustomWeight then
-                            return item:isCustomWeight()
-                        end
-                        return false
-                    end)
-                    if not successCheck or not isCustom then
-                        needsReapply = true
-                    end
+            if modData.itemWeightReduction and not instanceof(item, "InventoryContainer") then
+                local isCustom = item.isCustomWeight and item:isCustomWeight()
+                if not isCustom then
+                    needsReapply = true
                 end
             end
-            
+
             -- Check run speed modifier (for all clothing items with run speed modifiers)
-            -- Also check if item has tier but no run speed modifier bonus stored (needs initial application)
-            local isClothing = false
-            local successClothing, resultClothing = pcall(function()
-                return instanceof(item, "Clothing")
-            end)
-            if successClothing and resultClothing then
-                isClothing = true
-            end
-            
-            if isClothing then
+            if instanceof(item, "Clothing") then
                 -- Get base run speed modifier using shared helper
                 local baseRunSpeedMod = ZItemTiers.GetBaseRunSpeedModifier(item, modData)
                 
@@ -259,67 +182,25 @@ local function reapplyBonusesIfNeeded(item)
                             needsReapply = true
                         elseif modData.itemRunSpeedModifierBonus then
                             -- Check if run speed modifier needs re-application
-                            local successGet, currentRunSpeedMod = pcall(function()
-                                if item.getRunSpeedModifier then
-                                    return item:getRunSpeedModifier()
-                                end
-                                return baseRunSpeedMod
-                            end)
-                            
-                            if successGet then
-                                local expectedValue = baseRunSpeedMod + modData.itemRunSpeedModifierBonus
+                            local currentRunSpeedMod = item.getRunSpeedModifier and item:getRunSpeedModifier() or baseRunSpeedMod
+                            local expectedValue = baseRunSpeedMod + modData.itemRunSpeedModifierBonus
                                 -- Cap at 1.0 if base was negative
                                 if baseRunSpeedMod < 1.0 then
                                     expectedValue = math.min(expectedValue, 1.0)
                                 end
-                                if math.abs((currentRunSpeedMod or baseRunSpeedMod) - expectedValue) > 0.01 then
-                                    needsReapply = true
-                                end
+                            if math.abs((currentRunSpeedMod or baseRunSpeedMod) - expectedValue) > 0.01 then
+                                needsReapply = true
                             end
                         end
                     end
                 end
             end
-            
+
             -- Check bite and scratch defense bonuses
-            -- Also check if item has tier but no defense bonuses stored (needs initial application)
-            local isClothing = false
-            local successClothing, resultClothing = pcall(function()
-                return instanceof(item, "Clothing")
-            end)
-            if successClothing and resultClothing then
-                isClothing = true
-            end
-            
-            if isClothing then
-                -- Get base defense values to check if item has defense
-                local baseBiteDefense = 0
-                local baseScratchDefense = 0
-                local successGetBiteBase, biteBaseValue = pcall(function()
-                    if item.getScriptItem then
-                        local scriptItem = item:getScriptItem()
-                        if scriptItem and scriptItem.biteDefense then
-                            return scriptItem.biteDefense
-                        end
-                    end
-                    return 0
-                end)
-                if successGetBiteBase and biteBaseValue then
-                    baseBiteDefense = biteBaseValue
-                end
-                
-                local successGetScratchBase, scratchBaseValue = pcall(function()
-                    if item.getScriptItem then
-                        local scriptItem = item:getScriptItem()
-                        if scriptItem and scriptItem.scratchDefense then
-                            return scriptItem.scratchDefense
-                        end
-                    end
-                    return 0
-                end)
-                if successGetScratchBase and scratchBaseValue then
-                    baseScratchDefense = scratchBaseValue
-                end
+            if instanceof(item, "Clothing") then
+                local scriptItem = item.getScriptItem and item:getScriptItem() or nil
+                local baseBiteDefense = (scriptItem and scriptItem.biteDefense) or 0
+                local baseScratchDefense = (scriptItem and scriptItem.scratchDefense) or 0
                 
                 local tier = modData.itemTier
                 if tier and tier ~= "Common" then
@@ -335,81 +216,40 @@ local function reapplyBonusesIfNeeded(item)
                 
                 -- Check if stored bonuses need re-application (only if item has defense)
                 if modData.itemBiteDefenseBonus and baseBiteDefense > 0 then
-                    local successGet, currentBiteDefense = pcall(function()
-                        if item.getBiteDefense then
-                            return item:getBiteDefense()
-                        end
-                        return baseBiteDefense
-                    end)
-                    
-                    if successGet then
-                        local expectedValue = math.min(baseBiteDefense + modData.itemBiteDefenseBonus, 100)
-                        if math.abs((currentBiteDefense or baseBiteDefense) - expectedValue) > 0.01 then
-                            needsReapply = true
-                        end
+                    local currentBiteDefense = item.getBiteDefense and item:getBiteDefense() or baseBiteDefense
+                    local expectedValue = math.min(baseBiteDefense + modData.itemBiteDefenseBonus, 100)
+                    if math.abs((currentBiteDefense or baseBiteDefense) - expectedValue) > 0.01 then
+                        needsReapply = true
                     end
                 end
-                
                 if modData.itemScratchDefenseBonus and baseScratchDefense > 0 then
-                    local successGet, currentScratchDefense = pcall(function()
-                        if item.getScratchDefense then
-                            return item:getScratchDefense()
-                        end
-                        return baseScratchDefense
-                    end)
-                    
-                    if successGet then
-                        local expectedValue = math.min(baseScratchDefense + modData.itemScratchDefenseBonus, 100)
-                        if math.abs((currentScratchDefense or baseScratchDefense) - expectedValue) > 0.01 then
-                            needsReapply = true
-                        end
+                    local currentScratchDefense = item.getScratchDefense and item:getScratchDefense() or baseScratchDefense
+                    local expectedValue = math.min(baseScratchDefense + modData.itemScratchDefenseBonus, 100)
+                    if math.abs((currentScratchDefense or baseScratchDefense) - expectedValue) > 0.01 then
+                        needsReapply = true
                     end
                 end
             end
-            
+
             -- Check capacity bonus (for InventoryContainer items)
-            if modData.itemCapacityBonus then
-                local isContainer = false
-                local successContainer, resultContainer = pcall(function()
-                    return instanceof(item, "InventoryContainer")
-                end)
-                if successContainer and resultContainer then
-                    isContainer = true
-                end
-                
-                if isContainer then
+            if modData.itemCapacityBonus and instanceof(item, "InventoryContainer") then
                     -- Get base capacity: prefer stored base, then script item getter, then instance
                     local baseCapacity = 0
                     if modData.itemCapacityBase and modData.itemCapacityBase > 0 then
                         baseCapacity = modData.itemCapacityBase
                     else
-                        local successGetBase, baseValue = pcall(function()
-                            if item.getScriptItem then
-                                local scriptItem = item:getScriptItem()
-                                if scriptItem then
-                                    if scriptItem.getCapacity then
-                                        return scriptItem:getCapacity()
-                                    end
-                                    if scriptItem.capacity then
-                                        return scriptItem.capacity
-                                    end
-                                end
+                        local scriptItem = item.getScriptItem and item:getScriptItem() or nil
+                        if scriptItem then
+                            if scriptItem.getCapacity then
+                                baseCapacity = scriptItem:getCapacity()
+                            elseif scriptItem.capacity then
+                                baseCapacity = scriptItem.capacity
                             end
-                            return 0
-                        end)
-                        if successGetBase and baseValue and baseValue > 0 then
-                            baseCapacity = baseValue
                         end
                     end
-                    
-                    local successGet, currentCapacity = pcall(function()
-                        if item.getCapacity then
-                            return item:getCapacity()
-                        end
-                        return baseCapacity
-                    end)
-                    
-                    if successGet and baseCapacity > 0 then
+
+                    local currentCapacity = (item.getCapacity and item:getCapacity()) or baseCapacity
+                    if baseCapacity and baseCapacity > 0 then
                         -- Calculate expected capacity using percentage multiplier
                         local capacityMultiplier = 1.0 + (modData.itemCapacityBonus / 100.0)
                         local expectedValue = math.min(math.floor(baseCapacity * capacityMultiplier + 0.5), 50)
@@ -417,30 +257,13 @@ local function reapplyBonusesIfNeeded(item)
                             needsReapply = true
                         end
                     end
-                end
             end
-            
+
             -- Check max encumbrance bonus (for InventoryContainer items)
             -- Note: This is handled by Java patch at runtime, but we should ensure modData has the bonus stored
-            if modData.itemTier and modData.itemTier ~= "Common" then
-                local isContainer = false
-                local successContainer, resultContainer = pcall(function()
-                    return instanceof(item, "InventoryContainer")
-                end)
-                if successContainer and resultContainer then
-                    isContainer = true
-                end
-                
-                if isContainer then
-                    -- Check if item has a max item size and should have the bonus
-                    local successGet, maxItemSize = pcall(function()
-                        if item.getMaxItemSize then
-                            return item:getMaxItemSize()
-                        end
-                        return 0
-                    end)
-                    
-                    if successGet and maxItemSize and maxItemSize > 0 then
+            if modData.itemTier and modData.itemTier ~= "Common" and instanceof(item, "InventoryContainer") then
+                local maxItemSize = (item.getMaxItemSize and item:getMaxItemSize()) or 0
+                if maxItemSize > 0 then
                         -- Check if bonus should be stored but isn't
                         local tier = modData.itemTier
                         local bonuses = ZItemTiers and ZItemTiers.TierBonuses and ZItemTiers.TierBonuses[tier]
@@ -449,52 +272,19 @@ local function reapplyBonusesIfNeeded(item)
                             needsReapply = true
                             print("ZItemTiers: Max encumbrance bonus missing for " .. tier .. " container, will reapply")
                         end
-                    end
                 end
             end
-            
-                -- Check drainable capacity bonus (for Drainable items)
-                if modData.itemDrainableCapacityBonus then
-                    local isDrainable = false
-                    local successDrainable, resultDrainable = pcall(function()
-                        if item.getFluidContainer then
-                            local fluidContainer = item:getFluidContainer()
-                            return fluidContainer ~= nil
-                        end
-                        return false
-                    end)
-                    if successDrainable and resultDrainable then
-                        isDrainable = true
-                    end
-                    
-                    if isDrainable then
-                        local baseCapacity = modData.itemDrainableCapacityBase or 0
-                        if not modData.itemDrainableCapacityBase then
-                            local successGetBase, baseValue = pcall(function()
-                                if item.getFluidContainer then
-                                    local fluidContainer = item:getFluidContainer()
-                                    if fluidContainer and fluidContainer.getCapacity then
-                                        return fluidContainer:getCapacity()
-                                    end
-                                end
-                                return 0
-                            end)
-                            if successGetBase and baseValue then
-                                baseCapacity = baseValue
-                            end
-                        end
 
-                        local successGet, currentCapacity = pcall(function()
-                            if item.getFluidContainer then
-                                local fluidContainer = item:getFluidContainer()
-                                if fluidContainer and fluidContainer.getCapacity then
-                                    return fluidContainer:getCapacity()
-                                end
-                            end
-                            return baseCapacity
-                        end)
-                        
-                        if successGet and baseCapacity > 0 then
+            -- Check drainable capacity bonus (for Drainable items)
+                if modData.itemDrainableCapacityBonus then
+                    local fluidContainer = item.getFluidContainer and item:getFluidContainer() or nil
+                    if fluidContainer then
+                        local baseCapacity = modData.itemDrainableCapacityBase or 0
+                        if not modData.itemDrainableCapacityBase and fluidContainer.getCapacity then
+                            baseCapacity = fluidContainer:getCapacity() or 0
+                        end
+                        local currentCapacity = (fluidContainer.getCapacity and fluidContainer:getCapacity()) or baseCapacity
+                        if baseCapacity > 0 then
                             -- Calculate expected capacity: base * (1 + bonus percentage / 100)
                             local expectedCapacity = baseCapacity * (1 + modData.itemDrainableCapacityBonus / 100.0)
                             if math.abs((currentCapacity or baseCapacity) - expectedCapacity) > 0.01 then
@@ -507,34 +297,16 @@ local function reapplyBonusesIfNeeded(item)
                     local tier = modData.itemTier
                     if tier and tier ~= "Common" then
                         local bonuses = ZItemTiers and ZItemTiers.TierBonuses and ZItemTiers.TierBonuses[tier]
-                        if bonuses and bonuses.drainableCapacityBonus then
-                            local isDrainable = false
-                            local successDrainable, resultDrainable = pcall(function()
-                                if item.getFluidContainer then
-                                    local fluidContainer = item:getFluidContainer()
-                                    return fluidContainer ~= nil
-                                end
-                                return false
-                            end)
-                            if successDrainable and resultDrainable then
-                                isDrainable = true
-                            end
-                            
-                            if isDrainable then
-                                -- Bonus is missing, needs reapplication
-                                needsReapply = true
-                            end
+                        if bonuses and bonuses.drainableCapacityBonus and item.getFluidContainer and item:getFluidContainer() then
+                            needsReapply = true
                         end
                     end
                 end
             
             if needsReapply then
-                -- Re-apply all bonuses
                 local tier = modData.itemTier
                 if ZItemTiers and ZItemTiers.ApplyTierBonuses then
-                    pcall(function()
-                        ZItemTiers.ApplyTierBonuses(item, tier)
-                    end)
+                    ZItemTiers.ApplyTierBonuses(item, tier)
                 end
             end
         end
@@ -553,11 +325,8 @@ local function processSquareWorldItems(square)
         if worldObj and worldObj.getItem then
             local item = worldObj:getItem()
             if item then
-                local successGetType, itemType = pcall(function()
-                    return item:getFullType()
-                end)
-                local itemTypeStr = successGetType and itemType or "unknown"
-                print("ZItemTiers: [DEBUG] Checking world item: " .. itemTypeStr)
+            local itemTypeStr = item:getFullType() or "unknown"
+            print("ZItemTiers: [DEBUG] Checking world item: " .. itemTypeStr)
                 applyTierToItem(item, true) -- Force re-apply bonuses (for items loaded from save)
                 reapplyBonusesIfNeeded(item)
             end
@@ -578,10 +347,7 @@ local function processContainerItems(container)
     for i = 0, items:size() - 1 do
         local item = items:get(i)
         if item then
-            local successGetType, itemType = pcall(function()
-                return item:getFullType()
-            end)
-            local itemTypeStr = successGetType and itemType or "unknown"
+            local itemTypeStr = item:getFullType() or "unknown"
             print("ZItemTiers: [DEBUG] Checking item: " .. itemTypeStr)
             applyTierToItem(item, true) -- Force re-apply bonuses (for items loaded from save)
             reapplyBonusesIfNeeded(item)

@@ -12,24 +12,9 @@ ZItemTiers._currentItemForTooltip = nil
 
 -- Check if BetterClothingInfo mod is active and has DoTooltipClothing function
 -- DoTooltipClothing is defined at global scope: function DoTooltipClothing(objTooltip, item, layoutTooltip)
-local hasBetterClothingInfo = false
-local DrawItem = nil
-local SetItemInfoAsText = nil
-local successBCI, resultBCI = pcall(function()
-    if _G and _G.DoTooltipClothing then
-        hasBetterClothingInfo = true
-        -- Check if DrawItem is available (from BetterClothingInfo)
-        if _G.DrawItem then
-            DrawItem = _G.DrawItem
-        end
-        -- Check if SetItemInfoAsText is available (from BetterClothingInfo)
-        if _G.SetItemInfoAsText then
-            SetItemInfoAsText = _G.SetItemInfoAsText
-        end
-        return true
-    end
-    return false
-end)
+local hasBetterClothingInfo = _G and _G.DoTooltipClothing ~= nil
+local DrawItem = _G and _G.DrawItem or nil
+local SetItemInfoAsText = _G and _G.SetItemInfoAsText or nil
 
 if hasBetterClothingInfo and _G and _G.DoTooltipClothing and DrawItem and SetItemInfoAsText then
     -- Hook into SetItemInfoAsText to apply custom colors for Tier and Bonuses

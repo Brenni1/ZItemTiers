@@ -172,32 +172,21 @@ function ZItemTiers.IsItemBlacklisted(item)
     if not item then return true end
     
     -- Check if item is in the blacklist by full type name
-    local successType, fullType = pcall(function()
-        return item:getFullType()
-    end)
-    if successType and fullType and ZItemTiers.BlacklistedItems[fullType] then
+    local fullType = item:getFullType()
+    if fullType and ZItemTiers.BlacklistedItems[fullType] then
         return true
     end
     -- VHS tapes: blacklist by pattern (any fullType containing "VHS")
-    if successType and fullType and string.find(fullType, "VHS") then
+    if fullType and string.find(fullType, "VHS") then
         return true
     end
 
     -- Check if item is a Map type (all maps should be blacklisted)
     local itemType = item:getType()
     if itemType then
-        -- Check if it's ItemType.MAP
-        local successCheck, isMap = pcall(function()
-            if ItemType and ItemType.MAP then
-                return itemType == ItemType.MAP
-            end
-            -- Fallback: check by string name
-            if itemType and itemType.toString then
-                return itemType:toString() == "Map"
-            end
-            return false
-        end)
-        if successCheck and isMap then
+        local isMap = (ItemType and ItemType.MAP and itemType == ItemType.MAP) or
+            (itemType.toString and itemType:toString() == "Map")
+        if isMap then
             return true
         end
     end
@@ -218,35 +207,20 @@ function ZItemTiers.GetBaseRunSpeedModifier(item, modData)
     local base = 1.0
 
     -- Primary: script item getter (authoritative, always returns the vanilla base)
-    local success, value = pcall(function()
-        if item.getScriptItem then
-            local scriptItem = item:getScriptItem()
-            if scriptItem then
-                if scriptItem.getRunSpeedModifier then
-                    return scriptItem:getRunSpeedModifier()
-                end
-                if scriptItem.runSpeedModifier then
-                    return scriptItem.runSpeedModifier
-                end
+    if item.getScriptItem then
+        local scriptItem = item:getScriptItem()
+        if scriptItem then
+            if scriptItem.getRunSpeedModifier then
+                base = scriptItem:getRunSpeedModifier()
+            elseif scriptItem.runSpeedModifier then
+                base = scriptItem.runSpeedModifier
             end
         end
-        return nil
-    end)
-    if success and value then
-        base = value
     end
 
     -- Fallback: instance method (correct on first application before any modifications)
-    if math.abs(base - 1.0) <= 0.001 then
-        local successGet, instValue = pcall(function()
-            if item.getRunSpeedModifier then
-                return item:getRunSpeedModifier()
-            end
-            return 1.0
-        end)
-        if successGet and instValue then
-            base = instValue
-        end
+    if math.abs(base - 1.0) <= 0.001 and item.getRunSpeedModifier then
+        base = item:getRunSpeedModifier()
     end
 
     -- Cache in modData for future calls
@@ -309,15 +283,8 @@ function ZItemTiers.ApplyTierBonuses(item, tier)
     -- Only reset for drainable items to avoid unnecessary messages
     if modData._bonusesApplied and modData._bonusesApplied ~= ZItemTiers._bonusesAppliedSessionId then
         -- Check if this is a drainable item before resetting
-        local isDrainable = false
-        local successDrainable, resultDrainable = pcall(function()
-            if item.getFluidContainer then
-                local fluidContainer = item:getFluidContainer()
-                return fluidContainer ~= nil
-            end
-            return false
-        end)
-        if successDrainable and resultDrainable then
+        local isDrainable = item.getFluidContainer and item:getFluidContainer() ~= nil
+        if isDrainable then
             isDrainable = true
             modData.itemDrainableCapacityBase = nil
             print("ZItemTiers: Session ID changed, resetting base capacity for drainable item: " .. tostring(item:getFullType()))
@@ -371,48 +338,18 @@ function ZItemTiers.ApplyTierBonuses(item, tier)
     end
     
     -- Special handling for HandWeapon items
-    local isHandWeapon = false
-    local successWeapon, resultWeapon = pcall(function()
-        return instanceof(item, "HandWeapon")
-    end)
-    if successWeapon and resultWeapon then
-        isHandWeapon = true
-        
+    if instanceof(item, "HandWeapon") then
         -- Apply damage directly from Lua using setMinDamage/setMaxDamage
         -- Weight is handled by Java patch if available, otherwise skipped
-        if bonuses.damageMultiplier then
-            local successMin, originalMinDamage = pcall(function()
-                if item.getMinDamage then
-                    return item:getMinDamage()
-                end
-                return nil
-            end)
-            local successMax, originalMaxDamage = pcall(function()
-                if item.getMaxDamage then
-                    return item:getMaxDamage()
-                end
-                return nil
-            end)
-            
-            if successMin and successMax and originalMinDamage and originalMaxDamage then
-                local newMinDamage = originalMinDamage * bonuses.damageMultiplier
-                local newMaxDamage = originalMaxDamage * bonuses.damageMultiplier
-                
-                local successSet = pcall(function()
-                    if item.setMinDamage then
-                        item:setMinDamage(newMinDamage)
-                    end
-                    if item.setMaxDamage then
-                        item:setMaxDamage(newMaxDamage)
-                    end
-                end)
-                
-                if successSet then
-                    print("ZItemTiers: Applied damage multiplier " .. bonuses.damageMultiplier .. "x to HandWeapon: " .. tostring(item:getFullType()))
-                end
+        if bonuses.damageMultiplier and item.getMinDamage and item.getMaxDamage and item.setMinDamage and item.setMaxDamage then
+            local originalMinDamage = item:getMinDamage()
+            local originalMaxDamage = item:getMaxDamage()
+            if originalMinDamage and originalMaxDamage then
+                item:setMinDamage(originalMinDamage * bonuses.damageMultiplier)
+                item:setMaxDamage(originalMaxDamage * bonuses.damageMultiplier)
+                print("ZItemTiers: Applied damage multiplier " .. bonuses.damageMultiplier .. "x to HandWeapon: " .. tostring(item:getFullType()))
             end
         end
-        
         -- Weight is handled by Java patch if available, otherwise HandWeapon weight reduction is skipped
         -- (getActualWeight() reads from script item and ignores customWeight)
         return
@@ -506,16 +443,7 @@ function ZItemTiers.ApplyTierBonuses(item, tier)
     end
     
     -- Store reading speed bonus in modData for ISReadABook hook (only for books, not VHS tapes)
-    if bonuses.readingSpeedBonus then
-        local isLiterature = false
-        local successLiterature, resultLiterature = pcall(function()
-            return instanceof(item, "Literature")
-        end)
-        if successLiterature and resultLiterature then
-            isLiterature = true
-        end
-        
-        if isLiterature then
+    if bonuses.readingSpeedBonus and instanceof(item, "Literature") then
             -- Check if it's a VHS tape (exclude VHS from reading speed bonus)
             local isVHS = false
             local itemType = item:getType()
@@ -530,7 +458,6 @@ function ZItemTiers.ApplyTierBonuses(item, tier)
             if not isVHS and modData then
                 modData.itemReadingSpeedBonus = bonuses.readingSpeedBonus
             end
-        end
     end
     
     -- Store VHS skill XP bonus in modData (only for VHS tapes) -- commented out; VHS blacklisted for now
@@ -556,109 +483,51 @@ function ZItemTiers.ApplyTierBonuses(item, tier)
     end
     
     -- Apply hunger reduction bonus (for Food items that reduce hunger)
-    local isFood = false
-    local successFood, resultFood = pcall(function()
-        return instanceof(item, "Food")
-    end)
-    if successFood and resultFood then
-        isFood = true
-    end
-    
-    if isFood then
-        -- Get current hunger values for debugging
-        local successGetBase, baseHunger = pcall(function()
-            if item.getBaseHunger then
-                return item:getBaseHunger()
-            end
-            return nil
-        end)
-        local successGetHungChange, currentHungChange = pcall(function()
-            if item.getHungChange then
-                return item:getHungChange()
-            end
-            return nil
-        end)
-        
-        -- Get the original hunger change value from script item (this is the true base value)
+    if instanceof(item, "Food") then
+        local baseHunger = item.getBaseHunger and item:getBaseHunger() or nil
+        local currentHungChange = item.getHungChange and item:getHungChange() or nil
+        local scriptItem = item.getScriptItem and item:getScriptItem() or nil
+
         local originalHungChange = nil
-        local successGetScript, scriptItem = pcall(function()
-            if item.getScriptItem then
-                return item:getScriptItem()
-            end
-            return nil
-        end)
-        
-        if successGetScript and scriptItem then
-            -- Script item stores hungerChange as integer (e.g., -10 for -0.1)
+        if scriptItem then
             if scriptItem.HungerChange then
                 originalHungChange = scriptItem.HungerChange / 100.0
             elseif scriptItem.hungerChange then
                 originalHungChange = scriptItem.hungerChange / 100.0
             end
         end
-        
-        -- If we couldn't get from script item, try getBaseHunger (but it might be modified)
         if not originalHungChange then
-            if successGetBase and baseHunger and baseHunger ~= 0.0 then
+            if baseHunger and baseHunger ~= 0.0 then
                 originalHungChange = baseHunger
-            elseif successGetHungChange and currentHungChange then
+            elseif currentHungChange then
                 originalHungChange = currentHungChange
             end
         end
-        
-        -- Only apply bonus if hunger change is negative (reduces hunger) and we got the original from script item
-        if originalHungChange and originalHungChange < 0.0 and successGetScript and scriptItem then
+
+        if originalHungChange and originalHungChange < 0.0 and scriptItem then
             local tierIndex = tierData.index
             local multiplier = 1.0 + (tierIndex - 1) * 0.2
-            
-            -- Always use script item value as the true base (update stored value if different)
+
             if modData then
                 modData.itemHungerChangeOriginal = originalHungChange
             end
-            
-            -- Calculate expected modified value
+
             local expectedModified = originalHungChange * multiplier
-            
-            -- Check if bonus was already applied correctly
+
             local needsUpdate = true
-            if modData and modData.itemHungerReductionMultiplier then
-                if successGetHungChange and currentHungChange and math.abs(currentHungChange - expectedModified) < 0.001 then
-                    -- Already applied correctly, skip
-                    needsUpdate = false
-                end
+            if modData and modData.itemHungerReductionMultiplier and currentHungChange and math.abs(currentHungChange - expectedModified) < 0.001 then
+                needsUpdate = false
             end
-            
-            if needsUpdate then
-                -- Apply the modified hunger change to both hungChange and baseHunger
-                local successSet = pcall(function()
-                    if item.setHungChange then
-                        item:setHungChange(expectedModified)
-                    end
-                    if item.setBaseHunger then
-                        item:setBaseHunger(expectedModified)
-                    end
-                end)
-                
-                if successSet then
-                    -- Store the multiplier in modData to mark bonus as applied
-                    if modData then
-                        modData.itemHungerReductionMultiplier = multiplier
-                    end
-                    
-                    -- Verify the value was set
-                    local verifyHungChange = nil
-                    local verifyBaseHunger = nil
-                    local successVerify = pcall(function()
-                        if item.getHungChange then
-                            verifyHungChange = item:getHungChange()
-                        end
-                        if item.getBaseHunger then
-                            verifyBaseHunger = item:getBaseHunger()
-                        end
-                    end)
-                    
-                    print("ZItemTiers: Applied hunger reduction multiplier " .. multiplier .. "x to Food: " .. tostring(item:getFullType()) .. " (base: " .. tostring(originalHungChange) .. ", current: " .. tostring(successGetHungChange and currentHungChange or "nil") .. ", new: " .. tostring(expectedModified) .. ", verify: " .. tostring(verifyHungChange) .. ", verifyBase: " .. tostring(verifyBaseHunger) .. ")")
+
+            if needsUpdate and item.setHungChange and item.setBaseHunger then
+                item:setHungChange(expectedModified)
+                item:setBaseHunger(expectedModified)
+                if modData then
+                    modData.itemHungerReductionMultiplier = multiplier
                 end
+                local verifyHungChange = item.getHungChange and item:getHungChange() or nil
+                local verifyBaseHunger = item.getBaseHunger and item:getBaseHunger() or nil
+                print("ZItemTiers: Applied hunger reduction multiplier " .. multiplier .. "x to Food: " .. tostring(item:getFullType()) .. " (base: " .. tostring(originalHungChange) .. ", current: " .. tostring(currentHungChange) .. ", new: " .. tostring(expectedModified) .. ", verify: " .. tostring(verifyHungChange) .. ", verifyBase: " .. tostring(verifyBaseHunger) .. ")")
             end
         end
     end
