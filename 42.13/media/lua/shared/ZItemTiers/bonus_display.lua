@@ -32,20 +32,20 @@ end
 
 -- Add weight-related bonuses (weight reduction and encumbrance reduction)
 function ZItemTiers.AddWeightBonuses(bonusList, item, bonuses)
-    -- Check if this is a container to show encumbrance reduction
-    local isContainer = false
-    local successContainer, resultContainer = pcall(function()
-        return instanceof(item, "InventoryContainer")
-    end)
-    if successContainer and resultContainer then
-        isContainer = true
-    end
-    
-    -- Containers show both encumbrance reduction and weight reduction
+    local isContainer = instanceof(item, "InventoryContainer")
+
+    -- Containers: show total encumbrance reduction (base + tier bonus), not just the bonus
     if bonuses.encumbranceReduction and isContainer then
+        local displayValue = bonuses.encumbranceReduction
+        if item.getWeightReduction then
+            local total = item:getWeightReduction()
+            if total and total > 0 then
+                displayValue = total
+            end
+        end
         table.insert(bonusList, {
             type = "EncumbranceReduction",
-            value = bonuses.encumbranceReduction,
+            value = displayValue,
             displayName = "Encumbrance Reduction"
         })
     end
