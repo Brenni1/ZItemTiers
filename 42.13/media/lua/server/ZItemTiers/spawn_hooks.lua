@@ -4,38 +4,34 @@
 
 require "ZItemTiers/core"
 
+local function getOrCreateZIT(item)
+    if not item or not item.getModData then return nil end
+    
+    local modData = item:getModData()
+    if not modData then return nil end
+
+    if type(modData.ZIT) ~= "table" then
+        modData.ZIT = {}
+    end
+
+    return modData.ZIT
+end
+
 -- Helper function to apply tier to an item if it doesn't already have one
 -- If the item already has tier, re-apply bonuses (useful for migration/fixes)
 local function applyTierToItem(item, forceReapply)
-    if not item or not item.getModData then return end
+    local zit = getOrCreateZIT(item)
+    if not zit then return end
     
     local itemType = item:getFullType()
     
-    -- Safely get modData
-    local modData = item:getModData()
-    if not modData then return end
-    
     -- Skip items that were crafted with tier (they already have their tier set)
-    if modData.craftedFromTier then
+    if zit.craftedFromTier then
         if itemType and (string.find(itemType, "PetrolCan") or string.find(itemType, "GasCan")) then
             print("ZItemTiers: [DEBUG] Skipping " .. itemType .. " - crafted from tier")
         end
         return
     end
-    
---    -- Skip VHS items that are being restored from ejection (to prevent overriding restored tier)
---    if modData._vhsRestored or modData._vhsRestoring then
---        if itemType and string.find(itemType, "VHS") then
---            print("ZItemTiers: [VHS] Skipping " .. itemType .. " - VHS being restored from ejection")
---        end
---        return
---    end
---    
---    -- Check if this is a VHS item for logging
---    local isVHS = false
---    if itemType and string.find(itemType, "VHS") then
---        isVHS = true
---    end
     
     -- Skip items that might be in the crafting process (check if crafting state exists)
     -- This prevents spawn_hooks from applying Common tier to items that are about to get crafting tier
@@ -50,7 +46,7 @@ local function applyTierToItem(item, forceReapply)
         end
         -- If there's active crafting, skip applying tier to new items (let crafting hook handle it)
         -- Only skip if the item was created very recently (has no tier yet)
-        if hasActiveCrafting and not modData.itemTier then
+        if hasActiveCrafting and not zit.itemTier then
             -- Skip this item temporarily - crafting hook will apply tier within a few ticks
             -- This prevents spawn_hooks from applying Common tier before crafting hook applies Epic/Legendary/etc
             print("ZItemTiers: [spawn_hooks] Skipping " .. tostring(itemType) .. " - crafting in progress (will be handled by crafting hook)")
@@ -61,46 +57,24 @@ local function applyTierToItem(item, forceReapply)
     local tier = nil
     
     -- Check if item already has tier
-    if modData.itemTier then
+    if zit.itemTier then
         if forceReapply then
             -- Re-apply bonuses for existing items (for migration/fixes)
-            tier = modData.itemTier
-            if isVHS then
-                print("ZItemTiers: [VHS] Re-applying bonuses for " .. itemType .. " (existing tier: " .. tostring(tier) .. ")")
-            end
+            tier = zit.itemTier
         else
             -- Item already has tier and we're not forcing re-apply, skip
-            if isVHS then
-                print("ZItemTiers: [VHS] " .. itemType .. " already has tier: " .. tostring(modData.itemTier) .. ", skipping")
-            end
             return
         end
     else
         -- Item doesn't have tier, roll for it
         tier = ZItemTiers.RollTier()
     end
+    if not tier then return end
     
     -- Skip blacklisted items (keys, ID cards, etc.)
-    if ZItemTiers and ZItemTiers.IsItemBlacklisted and ZItemTiers.IsItemBlacklisted(item) then
-        if isVHS then
-            print("ZItemTiers: [VHS] " .. itemType .. " is blacklisted, skipping")
-        end
-        return
-    end
+    if ZItemTiers.IsItemBlacklisted(item) then return end
     
-    if tier then
-        -- Apply tier bonuses to all items (not just items with specific properties)
-        if ZItemTiers and ZItemTiers.ApplyTierBonuses then
-            if isVHS then
-                print("ZItemTiers: [VHS] Calling ApplyTierBonuses for " .. itemType .. " with tier " .. tostring(tier))
-            end
-            ZItemTiers.ApplyTierBonuses(item, tier)
-        end
-    else
-        if isVHS then
-            print("ZItemTiers: [VHS] No tier for " .. itemType .. ", skipping bonus application")
-        end
-    end
+    ZItemTiers.ApplyTierBonuses(item, tier)
 end
 
 -- Hook into OnFillContainer event to apply tier bonuses when items are spawned
@@ -124,19 +98,22 @@ local function onFillContainer(roomName, containerType, itemContainer)
     end
 end
 
--- Hook into OnFillContainer event
-Events.OnFillContainer.Add(onFillContainer)
+local function hookFillContainer()
+    Events.OnFillContainer.Add(onFillContainer)
+end
+
+-- try to apply tiers AFTER all other mods finished their OnFillContainer hooks
+Events.OnGameStart.Add(hookFillContainer)
+Events.OnServerStarted.Add(hookFillContainer)
 
 -- Helper function to re-apply weight reduction and run speed modifier to items that have tier but lost their bonuses
 -- This happens when items are loaded from save (load() resets customWeight to false, run speed modifier might get reset)
 -- For HandWeapon items, damage is applied from Lua, weight is handled by Java patch if available
 local function reapplyBonusesIfNeeded(item)
-    if not item or not item.getModData then return end
+    local zit = getOrCreateZIT(item)
+    if not zit then return end
     
-    local modData = item:getModData()
-    if not modData then return end
-    
-    if modData.itemTier then
+    if zit.itemTier then
         if instanceof(item, "HandWeapon") then
             -- For HandWeapon items:
             -- - Damage is applied directly from Lua (setMinDamage/setMaxDamage)
@@ -148,18 +125,18 @@ local function reapplyBonusesIfNeeded(item)
             local needsReapply = false
             
             -- Check encumbrance reduction (for containers)
-            if modData.itemEncumbranceReduction and instanceof(item, "InventoryContainer") then
-                local zit = modData.ZIT and modData.ZIT.baseValues
-                local baseEncumbranceReduction = (zit and zit.encumbranceReductionBase) or (item.getWeightReduction and item:getWeightReduction()) or 0
+            if zit.itemEncumbranceReduction and instanceof(item, "InventoryContainer") then
+                local baseValues = zit.baseValues
+                local baseEncumbranceReduction = (baseValues and baseValues.encumbranceReductionBase) or (item.getWeightReduction and item:getWeightReduction()) or 0
                 local currentEncumbranceReduction = item.getWeightReduction and item:getWeightReduction() or baseEncumbranceReduction
-                local expectedValue = math.min(baseEncumbranceReduction + modData.itemEncumbranceReduction, 85)
+                local expectedValue = math.min(baseEncumbranceReduction + zit.itemEncumbranceReduction, 85)
                 if math.abs((currentEncumbranceReduction or baseEncumbranceReduction) - expectedValue) > 0.01 then
                     needsReapply = true
                 end
             end
             
             -- Check weight reduction (for non-container items)
-            if modData.itemWeightReduction and not instanceof(item, "InventoryContainer") then
+            if zit.itemWeightReduction and not instanceof(item, "InventoryContainer") then
                 local isCustom = item.isCustomWeight and item:isCustomWeight()
                 if not isCustom then
                     needsReapply = true
@@ -169,21 +146,21 @@ local function reapplyBonusesIfNeeded(item)
             -- Check run speed modifier (for all clothing items with run speed modifiers)
             if instanceof(item, "Clothing") then
                 -- Get base run speed modifier using shared helper
-                local baseRunSpeedMod = ZItemTiers.GetBaseRunSpeedModifier(item, modData)
+                local baseRunSpeedMod = ZItemTiers.GetBaseRunSpeedModifier(item, zit)
                 
                 -- Check if item has a non-default run speed modifier
                 if math.abs(baseRunSpeedMod - 1.0) > 0.001 then
                     -- If item has tier but no run speed modifier bonus stored, it needs initial application
-                    local tier = modData.itemTier
+                    local tier = zit.itemTier
                     if tier and tier ~= "Common" then
                         local bonuses = ZItemTiers and ZItemTiers.TierBonuses and ZItemTiers.TierBonuses[tier]
-                        if bonuses and bonuses.runSpeedModifier and not modData.itemRunSpeedModifierBonus then
+                        if bonuses and bonuses.runSpeedModifier and not zit.itemRunSpeedModifierBonus then
                             -- Item has tier but run speed modifier wasn't applied yet
                             needsReapply = true
-                        elseif modData.itemRunSpeedModifierBonus then
+                        elseif zit.itemRunSpeedModifierBonus then
                             -- Check if run speed modifier needs re-application
                             local currentRunSpeedMod = item.getRunSpeedModifier and item:getRunSpeedModifier() or baseRunSpeedMod
-                            local expectedValue = baseRunSpeedMod + modData.itemRunSpeedModifierBonus
+                            local expectedValue = baseRunSpeedMod + zit.itemRunSpeedModifierBonus
                                 -- Cap at 1.0 if base was negative
                                 if baseRunSpeedMod < 1.0 then
                                     expectedValue = math.min(expectedValue, 1.0)
@@ -202,29 +179,29 @@ local function reapplyBonusesIfNeeded(item)
                 local baseBiteDefense = (scriptItem and scriptItem.biteDefense) or 0
                 local baseScratchDefense = (scriptItem and scriptItem.scratchDefense) or 0
                 
-                local tier = modData.itemTier
+                local tier = zit.itemTier
                 if tier and tier ~= "Common" then
                     local bonuses = ZItemTiers and ZItemTiers.TierBonuses and ZItemTiers.TierBonuses[tier]
                     if bonuses then
                         -- Check if item needs initial defense bonus application (only if item has defense)
-                        if (bonuses.biteDefenseBonus and baseBiteDefense > 0 and not modData.itemBiteDefenseBonus) or
-                           (bonuses.scratchDefenseBonus and baseScratchDefense > 0 and not modData.itemScratchDefenseBonus) then
+                        if (bonuses.biteDefenseBonus and baseBiteDefense > 0 and not zit.itemBiteDefenseBonus) or
+                           (bonuses.scratchDefenseBonus and baseScratchDefense > 0 and not zit.itemScratchDefenseBonus) then
                             needsReapply = true
                         end
                     end
                 end
                 
                 -- Check if stored bonuses need re-application (only if item has defense)
-                if modData.itemBiteDefenseBonus and baseBiteDefense > 0 then
+                if zit.itemBiteDefenseBonus and baseBiteDefense > 0 then
                     local currentBiteDefense = item.getBiteDefense and item:getBiteDefense() or baseBiteDefense
-                    local expectedValue = math.min(baseBiteDefense + modData.itemBiteDefenseBonus, 100)
+                    local expectedValue = math.min(baseBiteDefense + zit.itemBiteDefenseBonus, 100)
                     if math.abs((currentBiteDefense or baseBiteDefense) - expectedValue) > 0.01 then
                         needsReapply = true
                     end
                 end
-                if modData.itemScratchDefenseBonus and baseScratchDefense > 0 then
+                if zit.itemScratchDefenseBonus and baseScratchDefense > 0 then
                     local currentScratchDefense = item.getScratchDefense and item:getScratchDefense() or baseScratchDefense
-                    local expectedValue = math.min(baseScratchDefense + modData.itemScratchDefenseBonus, 100)
+                    local expectedValue = math.min(baseScratchDefense + zit.itemScratchDefenseBonus, 100)
                     if math.abs((currentScratchDefense or baseScratchDefense) - expectedValue) > 0.01 then
                         needsReapply = true
                     end
@@ -232,11 +209,11 @@ local function reapplyBonusesIfNeeded(item)
             end
 
             -- Check capacity bonus (for InventoryContainer items)
-            if modData.itemCapacityBonus and instanceof(item, "InventoryContainer") then
+            if zit.itemCapacityBonus and instanceof(item, "InventoryContainer") then
                     -- Get base capacity: prefer stored base, then script item getter, then instance
                     local baseCapacity = 0
-                    if modData.itemCapacityBase and modData.itemCapacityBase > 0 then
-                        baseCapacity = modData.itemCapacityBase
+                    if zit.itemCapacityBase and zit.itemCapacityBase > 0 then
+                        baseCapacity = zit.itemCapacityBase
                     else
                         local scriptItem = item.getScriptItem and item:getScriptItem() or nil
                         if scriptItem then
@@ -251,7 +228,7 @@ local function reapplyBonusesIfNeeded(item)
                     local currentCapacity = (item.getCapacity and item:getCapacity()) or baseCapacity
                     if baseCapacity and baseCapacity > 0 then
                         -- Calculate expected capacity using percentage multiplier
-                        local capacityMultiplier = 1.0 + (modData.itemCapacityBonus / 100.0)
+                        local capacityMultiplier = 1.0 + (zit.itemCapacityBonus / 100.0)
                         local expectedValue = math.min(math.floor(baseCapacity * capacityMultiplier + 0.5), 50)
                         if math.abs((currentCapacity or baseCapacity) - expectedValue) > 0.01 then
                             needsReapply = true
@@ -260,14 +237,14 @@ local function reapplyBonusesIfNeeded(item)
             end
 
             -- Check max encumbrance bonus (for InventoryContainer items)
-            -- Note: This is handled by Java patch at runtime, but we should ensure modData has the bonus stored
-            if modData.itemTier and modData.itemTier ~= "Common" and instanceof(item, "InventoryContainer") then
+            -- Note: This is handled by Java patch at runtime, but we should ensure zit has the bonus stored
+            if zit.itemTier and zit.itemTier ~= "Common" and instanceof(item, "InventoryContainer") then
                 local maxItemSize = (item.getMaxItemSize and item:getMaxItemSize()) or 0
                 if maxItemSize > 0 then
                         -- Check if bonus should be stored but isn't
-                        local tier = modData.itemTier
+                        local tier = zit.itemTier
                         local bonuses = ZItemTiers and ZItemTiers.TierBonuses and ZItemTiers.TierBonuses[tier]
-                        if bonuses and bonuses.maxEncumbranceBonus and not modData.itemMaxEncumbranceBonus then
+                        if bonuses and bonuses.maxEncumbranceBonus and not zit.itemMaxEncumbranceBonus then
                             -- Bonus is missing, needs reapplication
                             needsReapply = true
                             print("ZItemTiers: Max encumbrance bonus missing for " .. tier .. " container, will reapply")
@@ -276,17 +253,17 @@ local function reapplyBonusesIfNeeded(item)
             end
 
             -- Check drainable capacity bonus (for Drainable items)
-                if modData.itemDrainableCapacityBonus then
+                if zit.itemDrainableCapacityBonus then
                     local fluidContainer = item.getFluidContainer and item:getFluidContainer() or nil
                     if fluidContainer then
-                        local baseCapacity = modData.itemDrainableCapacityBase or 0
-                        if not modData.itemDrainableCapacityBase and fluidContainer.getCapacity then
+                        local baseCapacity = zit.itemDrainableCapacityBase or 0
+                        if not zit.itemDrainableCapacityBase and fluidContainer.getCapacity then
                             baseCapacity = fluidContainer:getCapacity() or 0
                         end
                         local currentCapacity = (fluidContainer.getCapacity and fluidContainer:getCapacity()) or baseCapacity
                         if baseCapacity > 0 then
                             -- Calculate expected capacity: base * (1 + bonus percentage / 100)
-                            local expectedCapacity = baseCapacity * (1 + modData.itemDrainableCapacityBonus / 100.0)
+                            local expectedCapacity = baseCapacity * (1 + zit.itemDrainableCapacityBonus / 100.0)
                             if math.abs((currentCapacity or baseCapacity) - expectedCapacity) > 0.01 then
                                 needsReapply = true
                             end
@@ -294,7 +271,7 @@ local function reapplyBonusesIfNeeded(item)
                     end
                 else
                     -- Check if bonus should be stored but isn't (for drainable items with tier)
-                    local tier = modData.itemTier
+                    local tier = zit.itemTier
                     if tier and tier ~= "Common" then
                         local bonuses = ZItemTiers and ZItemTiers.TierBonuses and ZItemTiers.TierBonuses[tier]
                         if bonuses and bonuses.drainableCapacityBonus and item.getFluidContainer and item:getFluidContainer() then
@@ -304,7 +281,7 @@ local function reapplyBonusesIfNeeded(item)
                 end
             
             if needsReapply then
-                local tier = modData.itemTier
+                local tier = zit.itemTier
                 if ZItemTiers and ZItemTiers.ApplyTierBonuses then
                     ZItemTiers.ApplyTierBonuses(item, tier)
                 end
@@ -362,87 +339,87 @@ end
 -- - Items are picked up from ground (added to inventory)
 -- - Floor container is accessed (world items on the ground)
 -- Event signature: (container)
-local function onContainerUpdate(container)
-    if not ZItemTiers then return end
-    if not container then return end
-    
-    -- Check if container has getType method
-    if not container.getType then
-        -- If no getType method, try to process items directly (might be a special container)
-        processContainerItems(container)
-        return
-    end
-    
-    -- Check if this is the floor container (world items on the ground)
-    local successGetType, containerType = pcall(function()
-        return container:getType()
-    end)
-    if successGetType and containerType == "floor" then
-        -- For floor container, process world items on all nearby squares
-        -- Get the player to find their current square
-        local player = getPlayer()
-        if player then
-            local square = player:getCurrentSquare()
-            if square then
-                -- Process world items on the player's current square
-                processSquareWorldItems(square)
-                -- Also process adjacent squares (in case items are on nearby squares)
-                for dx = -1, 1 do
-                    for dy = -1, 1 do
-                        if not (dx == 0 and dy == 0) then
-                            local adjSquare = getCell():getGridSquare(square:getX() + dx, square:getY() + dy, square:getZ())
-                            if adjSquare then
-                                processSquareWorldItems(adjSquare)
-                            end
-                        end
-                    end
-                end
-            end
-        end
-    else
-        -- Process all items in the container when it's updated
-        processContainerItems(container)
-    end
-end
+--local function onContainerUpdate(container)
+--    if not ZItemTiers then return end
+--    if not container then return end
+--    
+--    -- Check if container has getType method
+--    if not container.getType then
+--        -- If no getType method, try to process items directly (might be a special container)
+--        processContainerItems(container)
+--        return
+--    end
+--    
+--    -- Check if this is the floor container (world items on the ground)
+--    local successGetType, containerType = pcall(function()
+--        return container:getType()
+--    end)
+--    if successGetType and containerType == "floor" then
+--        -- For floor container, process world items on all nearby squares
+--        -- Get the player to find their current square
+--        local player = getPlayer()
+--        if player then
+--            local square = player:getCurrentSquare()
+--            if square then
+--                -- Process world items on the player's current square
+--                processSquareWorldItems(square)
+--                -- Also process adjacent squares (in case items are on nearby squares)
+--                for dx = -1, 1 do
+--                    for dy = -1, 1 do
+--                        if not (dx == 0 and dy == 0) then
+--                            local adjSquare = getCell():getGridSquare(square:getX() + dx, square:getY() + dy, square:getZ())
+--                            if adjSquare then
+--                                processSquareWorldItems(adjSquare)
+--                            end
+--                        end
+--                    end
+--                end
+--            end
+--        end
+--    else
+--        -- Process all items in the container when it's updated
+--        processContainerItems(container)
+--    end
+--end
 
 -- Hook into OnContainerUpdate event
-Events.OnContainerUpdate.Add(onContainerUpdate)
+--Events.OnContainerUpdate.Add(onContainerUpdate)
 
 -- Hook into ISInventoryPane:refreshContainer to ensure bonuses are applied when inventory is viewed
 -- This catches cases where items exist but bonuses weren't applied
 -- Also processes world items when loot window is opened
-local originalRefreshContainer = ISInventoryPane.refreshContainer
-if originalRefreshContainer then
-    function ISInventoryPane:refreshContainer(...)
-        local result = originalRefreshContainer(self, ...)
-        
-        -- After refresh, check all items in the container and ensure bonuses are applied
-        if self.inventory then
-            local success, items = pcall(function()
-                if self.inventory.getItems then
-                    return self.inventory:getItems()
-                end
-                return nil
-            end)
-            
-            if success and items then
-                for i = 0, items:size() - 1 do
-                    local item = items:get(i)
-                    if item then
-                        -- Check if item has tier but bonuses might not be applied
-                        local modData = item:getModData()
-                        if modData and modData.itemTier then
-                            -- Force re-apply bonuses to ensure they're all applied
-                            reapplyBonusesIfNeeded(item)
-                        end
-                    end
-                end
-            end
-        end
-        
-        return result
-    end
-end
+--local originalRefreshContainer = ISInventoryPane.refreshContainer
+--if originalRefreshContainer then
+--    function ISInventoryPane:refreshContainer(...)
+--        local result = originalRefreshContainer(self, ...)
+--        
+--        -- After refresh, check all items in the container and ensure bonuses are applied
+--        if self.inventory then
+--            local success, items = pcall(function()
+--                if self.inventory.getItems then
+--                    return self.inventory:getItems()
+--                end
+--                return nil
+--            end)
+--            
+--            if success and items then
+--                for i = 0, items:size() - 1 do
+--                    local item = items:get(i)
+--                    if item then
+--                        -- Check if item has tier but bonuses might not be applied
+--                        local zit = getOrCreateZIT(item)
+--                        if zit and zit.itemTier then
+--                            -- Force re-apply bonuses to ensure they're all applied
+--                            reapplyBonusesIfNeeded(item)
+--                        end
+--                    end
+--                end
+--            end
+--        end
+--        
+--        return result
+--    end
+--end
 
 
 local function onGameStart()
@@ -485,152 +462,38 @@ end
 Events.OnGameStart.Add(onGameStart)
 
 -- Hook into ISRemoveSheetAction to apply tier to produced sheets
-if ISRemoveSheetAction and ISRemoveSheetAction.complete then
-    local originalRemoveSheetComplete = ISRemoveSheetAction.complete
-    function ISRemoveSheetAction:complete()
-        -- Try to get the curtain's tier before removing it
-        local curtainTier = nil
-        local curtainItem = nil
-        
-        -- Check if self.item is an IsoCurtain or has curtains
-        if self.item then
-            if instanceof(self.item, "IsoCurtain") then
-                curtainItem = self.item
-            elseif instanceof(self.item, "IsoDoor") and self.item.HasCurtains then
-                local successGetCurtain, curtain = pcall(function()
-                    return self.item:HasCurtains()
-                end)
-                if successGetCurtain and curtain then
-                    curtainItem = curtain
-                end
-            end
+zbHook({
+    ISRemoveSheetAction = {
+        complete = function(orig, self, ...)
+            -- Try to get the curtain's tier before removing it
+            local curtainTier = nil
+            local curtainItem = nil
             
-            -- Try to get tier from curtain's modData
-            if curtainItem and curtainItem.getModData then
-                local successGetModData, modData = pcall(function()
-                    return curtainItem:getModData()
-                end)
-                if successGetModData and modData and modData.itemTier then
-                    curtainTier = modData.itemTier
-                    print("ZItemTiers: [RemoveCurtain] Found curtain tier: " .. curtainTier)
-                end
-            end
-        end
-        
-        -- Call original complete method
-        originalRemoveSheetComplete(self)
-        
-        -- Use OnTick to check for the sheet after a short delay (item might be added asynchronously)
-        local character = self.character
-        local storedTier = curtainTier  -- Store for use in OnTick handler
-        local checkTicks = 0
-        local maxTicks = 3  -- Check for 3 ticks
-        Events.OnTick.Add(function()
-            checkTicks = checkTicks + 1
-            
-            if checkTicks > maxTicks then
-                return false  -- Remove this event handler
-            end
-            
-            -- Apply tier to the sheet that was just added to inventory
-            if character and character.getInventory then
-                local successGetInv, inv = pcall(function()
-                    return character:getInventory()
-                end)
-                
-                if successGetInv and inv and inv.getItems then
-                    local successGetItems, items = pcall(function()
-                        return inv:getItems()
+            -- Check if self.item is an IsoCurtain or has curtains
+            if self.item then
+                if instanceof(self.item, "IsoCurtain") then
+                    curtainItem = self.item
+                elseif instanceof(self.item, "IsoDoor") and self.item.HasCurtains then
+                    local successGetCurtain, curtain = pcall(function()
+                        return self.item:HasCurtains()
                     end)
-                    
-                    if successGetItems and items then
-                        -- Find a sheet without tier
-                        for i = 0, items:size() - 1 do
-                            local item = items:get(i)
-                            if item and not ZItemTiers.IsItemBlacklisted(item) then
-                                local itemType = nil
-                                local successType, typeValue = pcall(function() return item:getFullType() end)
-                                if successType and typeValue then
-                                    itemType = typeValue
-                                end
-                                
-                                -- Check if this is a sheet
-                                if itemType and (itemType == "Base.Sheet" or string.find(itemType, "Sheet")) then
-                                    local modData = item:getModData()
-                                    if modData then
-                                        local currentTier = modData.itemTier
-                                        
-                                        -- Apply tier if sheet doesn't have one yet
-                                        if not currentTier then
-                                            -- Use stored tier from curtain if available, otherwise roll new one
-                                            local tier = storedTier or ZItemTiers.RollTier()
-                                            modData.itemTier = tier
-                                            
-                                            -- Apply the tier bonuses
-                                            if ZItemTiers and ZItemTiers.ApplyTierBonuses then
-                                                ZItemTiers.ApplyTierBonuses(item, tier)
-                                            end
-                                            
-                                            if storedTier then
-                                                print("ZItemTiers: [RemoveCurtain] Preserved tier " .. tier .. " from curtain to produced sheet: " .. itemType)
-                                            else
-                                                print("ZItemTiers: [RemoveCurtain] Applied tier " .. tier .. " to produced sheet: " .. itemType)
-                                            end
-                                            return false  -- Found and applied, remove handler
-                                        end
-                                    end
-                                end
-                            end
-                        end
+                    if successGetCurtain and curtain then
+                        curtainItem = curtain
                     end
                 end
-            end
-            
-            return true
-        end)
-    end
-    
-    print("ZItemTiers: Hooked ISRemoveSheetAction:complete for sheet tier")
-end
-
--- Hook into ISAddSheetAction to preserve sheet tier when creating curtains
-if ISAddSheetAction and ISAddSheetAction.complete then
-    local originalAddSheetComplete = ISAddSheetAction.complete
-    function ISAddSheetAction:complete()
-        -- Get the sheet's tier before it's removed from inventory
-        local sheetTier = nil
-        if self.character and self.character.getInventory then
-            local successGetInv, inv = pcall(function()
-                return self.character:getInventory()
-            end)
-            
-            if successGetInv and inv and inv.FindAndReturn then
-                local successFindSheet, sheet = pcall(function()
-                    return inv:FindAndReturn("Sheet")
-                end)
                 
-                if successFindSheet and sheet then
-                    local successGetModData, modData = pcall(function()
-                        return sheet:getModData()
-                    end)
-                    if successGetModData and modData and modData.itemTier then
-                        sheetTier = modData.itemTier
-                        print("ZItemTiers: [AddCurtain] Found sheet tier: " .. sheetTier)
-                    end
-                end
+                local curtain_zit = getOrCreateZIT(curtainItem)
+                curtainTier = curtain_zit and curtain_zit.itemTier or nil
             end
-        end
-        
-        -- Call original complete method (this will remove the sheet and create the curtain)
-        originalAddSheetComplete(self)
-        
-        -- Apply the sheet's tier to the newly created curtain
-        if sheetTier and self.item then
-            -- Use OnTick to check for the curtain after a short delay
-            local windowItem = self.item
-            local storedTier = sheetTier
+            
+            -- Call original complete method
+            orig(self, ...)
+            
+            -- Use OnTick to check for the sheet after a short delay (item might be added asynchronously)
+            local character = self.character
+            local storedTier = curtainTier  -- Store for use in OnTick handler
             local checkTicks = 0
-            local maxTicks = 3
+            local maxTicks = 3  -- Check for 3 ticks
             Events.OnTick.Add(function()
                 checkTicks = checkTicks + 1
                 
@@ -638,45 +501,51 @@ if ISAddSheetAction and ISAddSheetAction.complete then
                     return false  -- Remove this event handler
                 end
                 
-                -- Find the curtain that was just created
-                if windowItem and windowItem.getSquare then
-                    local successGetSquare, square = pcall(function()
-                        return windowItem:getSquare()
+                -- Apply tier to the sheet that was just added to inventory
+                if character and character.getInventory then
+                    local successGetInv, inv = pcall(function()
+                        return character:getInventory()
                     end)
                     
-                    if successGetSquare and square then
-                        -- Check for curtains on this square and adjacent squares
-                        local squaresToCheck = {square}
-                        if windowItem.north then
-                            local adjSquare = getCell():getGridSquare(square:getX(), square:getY() - 1, square:getZ())
-                            if adjSquare then table.insert(squaresToCheck, adjSquare) end
-                        else
-                            local adjSquare = getCell():getGridSquare(square:getX() - 1, square:getY(), square:getZ())
-                            if adjSquare then table.insert(squaresToCheck, adjSquare) end
-                        end
+                    if successGetInv and inv and inv.getItems then
+                        local successGetItems, items = pcall(function()
+                            return inv:getItems()
+                        end)
                         
-                        for _, sq in ipairs(squaresToCheck) do
-                            if sq and sq.getSpecialObjects then
-                                local successGetObjects, objects = pcall(function()
-                                    return sq:getSpecialObjects()
-                                end)
-                                
-                                if successGetObjects and objects then
-                                    for i = 0, objects:size() - 1 do
-                                        local obj = objects:get(i)
-                                        if obj and instanceof(obj, "IsoCurtain") then
-                                            local successGetModData, modData = pcall(function()
-                                                return obj:getModData()
-                                            end)
-                                            if successGetModData and modData then
-                                                local currentTier = modData.itemTier
+                        if successGetItems and items then
+                            -- Find a sheet without tier
+                            for i = 0, items:size() - 1 do
+                                local item = items:get(i)
+                                if item and not ZItemTiers.IsItemBlacklisted(item) then
+                                    local itemType = nil
+                                    local successType, typeValue = pcall(function() return item:getFullType() end)
+                                    if successType and typeValue then
+                                        itemType = typeValue
+                                    end
+                                    
+                                    -- Check if this is a sheet
+                                    if itemType and (itemType == "Base.Sheet" or string.find(itemType, "Sheet")) then
+                                        local zit = getOrCreateZIT(item)
+                                        if zit then
+                                            local currentTier = zit.itemTier
+                                            
+                                            -- Apply tier if sheet doesn't have one yet
+                                            if not currentTier then
+                                                -- Use stored tier from curtain if available, otherwise roll new one
+                                                local tier = storedTier or ZItemTiers.RollTier()
+                                                zit.itemTier = tier
                                                 
-                                                -- Apply tier if curtain doesn't have one yet
-                                                if not currentTier then
-                                                    modData.itemTier = storedTier
-                                                    print("ZItemTiers: [AddCurtain] Preserved tier " .. storedTier .. " from sheet to curtain")
-                                                    return false  -- Found and applied, remove handler
+                                                -- Apply the tier bonuses
+                                                if ZItemTiers and ZItemTiers.ApplyTierBonuses then
+                                                    ZItemTiers.ApplyTierBonuses(item, tier)
                                                 end
+                                                
+                                                if storedTier then
+                                                    print("ZItemTiers: [RemoveCurtain] Preserved tier " .. tier .. " from curtain to produced sheet: " .. itemType)
+                                                else
+                                                    print("ZItemTiers: [RemoveCurtain] Applied tier " .. tier .. " to produced sheet: " .. itemType)
+                                                end
+                                                return false  -- Found and applied, remove handler
                                             end
                                         end
                                     end
@@ -687,9 +556,94 @@ if ISAddSheetAction and ISAddSheetAction.complete then
                 end
                 
                 return true
-            end)
-        end
-    end
-    
-    print("ZItemTiers: Hooked ISAddSheetAction:complete for curtain tier")
-end
+            end) -- Events.OnTick.Add
+        end -- complete
+    } -- ISRemoveSheetAction
+}) -- zbHook
+
+-- Hook into ISAddSheetAction to preserve sheet tier when creating curtains
+zbHook({
+    ISAddSheetAction = {
+        complete = function(orig, self, ...)
+            -- Get the sheet's tier before it's removed from inventory
+            local sheetTier = nil
+            if self.character and self.character.getInventory then
+                local inv = self.character.getInventory()
+                if inv and inv.FindAndReturn then -- TODO: test
+                    local sheet = inv:FindAndReturn("Sheet")
+                    if sheet then
+                        local zit = getOrCreateZIT(sheet)
+                        sheetTier = zit and zit.itemTier or nil
+                    end
+                end
+            end
+            
+            -- Call original complete method (this will remove the sheet and create the curtain)
+            orig(self, ...)
+            
+            -- Apply the sheet's tier to the newly created curtain
+            if sheetTier and self.item then
+                -- Use OnTick to check for the curtain after a short delay
+                local windowItem = self.item
+                local storedTier = sheetTier
+                local checkTicks = 0
+                local maxTicks = 3
+                Events.OnTick.Add(function()
+                    checkTicks = checkTicks + 1
+                    
+                    if checkTicks > maxTicks then
+                        return false  -- Remove this event handler
+                    end
+                    
+                    -- Find the curtain that was just created
+                    if windowItem and windowItem.getSquare then
+                        local successGetSquare, square = pcall(function()
+                            return windowItem:getSquare()
+                        end)
+                        
+                        if successGetSquare and square then
+                            -- Check for curtains on this square and adjacent squares
+                            local squaresToCheck = {square}
+                            if windowItem.north then
+                                local adjSquare = getCell():getGridSquare(square:getX(), square:getY() - 1, square:getZ())
+                                if adjSquare then table.insert(squaresToCheck, adjSquare) end
+                            else
+                                local adjSquare = getCell():getGridSquare(square:getX() - 1, square:getY(), square:getZ())
+                                if adjSquare then table.insert(squaresToCheck, adjSquare) end
+                            end
+                            
+                            for _, sq in ipairs(squaresToCheck) do
+                                if sq and sq.getSpecialObjects then
+                                    local successGetObjects, objects = pcall(function()
+                                        return sq:getSpecialObjects()
+                                    end)
+                                    
+                                    if successGetObjects and objects then
+                                        for i = 0, objects:size() - 1 do
+                                            local obj = objects:get(i)
+                                            if obj and instanceof(obj, "IsoCurtain") then
+                                                local zit = getOrCreateZIT(obj)
+                                                if zit then
+                                                    local currentTier = zit.itemTier
+                                                    
+                                                    -- Apply tier if curtain doesn't have one yet
+                                                    if not currentTier then
+                                                        zit.itemTier = storedTier
+                                                        print("ZItemTiers: [AddCurtain] Preserved tier " .. storedTier .. " from sheet to curtain")
+                                                        return false  -- Found and applied, remove handler
+                                                    end
+                                                end
+                                            end
+                                        end
+                                    end
+                                end
+                            end
+                        end
+                    end
+                    
+                    return true
+                end) -- Events.OnTick.Add
+            end
+        end -- complete
+    }
+})

@@ -120,49 +120,48 @@ require "ZItemTiers/integrations/contextmenu"
 
 -- Check if BetterClothingInfo integration was successful
 -- If not, fall back to ISToolTipInv:render hook
-if not (ZItemTiers and ZItemTiers.BetterClothingInfoActive) then
+if not ZItemTiers.BetterClothingInfoActive then
     -- BetterClothingInfo is not active - use ISToolTipInv:render hook
-    local originalISToolTipInvRender = ISToolTipInv.render
-    if originalISToolTipInvRender then
-        function ISToolTipInv:render()
-            -- Call the original render first (this preserves other mods)
-            originalISToolTipInvRender(self)
+    zbHook({
+        ISToolTipInv = {
+            render = function(orig, self, ...)
+                orig(self, ...)
             
-            -- After the original render is complete, append our tier info
-            -- Only add if item has tier and we're not in a context menu
-            if self.item and (not ISContextMenu.instance or not ISContextMenu.instance.visibleCheck) then
-                -- Check if item has tier
-                if hasTier(self.item) then
-                    -- Get the current tooltip height to know where to append
-                    local currentHeight = self.tooltip:getHeight()
-                    
-                    -- Create a new layout section for our tier info
-                    local layout = self.tooltip:beginLayout()
-                    if layout then
-                        layout:setMinLabelWidth(80)
-                        -- Add our tier info to this new layout
-                        if ZItemTiers and ZItemTiers.addTierToLayout then
-                            ZItemTiers.addTierToLayout(self.item, layout)
+                -- After the original render is complete, append our tier info
+                -- Only add if item has tier and we're not in a context menu
+                if self.item and (not ISContextMenu.instance or not ISContextMenu.instance.visibleCheck) then
+                    -- Check if item has tier
+                    if hasTier(self.item) then
+                        -- Get the current tooltip height to know where to append
+                        local currentHeight = self.tooltip:getHeight()
+                        
+                        -- Create a new layout section for our tier info
+                        local layout = self.tooltip:beginLayout()
+                        if layout then
+                            layout:setMinLabelWidth(80)
+                            -- Add our tier info to this new layout
+                            if ZItemTiers and ZItemTiers.addTierToLayout then
+                                ZItemTiers.addTierToLayout(self.item, layout)
+                            end
+                            -- Render this layout section starting from the current height
+                            local startY = currentHeight > 0 and (currentHeight - self.tooltip.padBottom) or self.tooltip.padTop
+                            local y3 = layout:render(self.tooltip.padLeft, startY, self.tooltip)
+                            self.tooltip:endLayout(layout)
+                            -- Update tooltip height to include our new section
+                            self.tooltip:setHeight(y3 + self.tooltip.padBottom)
+                            -- Update tooltip width if needed
+                            if self.tooltip:getWidth() < 150 then
+                                self.tooltip:setWidth(150)
+                            end
+                            -- Update the ISToolTipInv panel dimensions to match
+                            local tw = self.tooltip:getWidth()
+                            local th = self.tooltip:getHeight()
+                            self:setWidth(tw)
+                            self:setHeight(th)
                         end
-                        -- Render this layout section starting from the current height
-                        local startY = currentHeight > 0 and (currentHeight - self.tooltip.padBottom) or self.tooltip.padTop
-                        local y3 = layout:render(self.tooltip.padLeft, startY, self.tooltip)
-                        self.tooltip:endLayout(layout)
-                        -- Update tooltip height to include our new section
-                        self.tooltip:setHeight(y3 + self.tooltip.padBottom)
-                        -- Update tooltip width if needed
-                        if self.tooltip:getWidth() < 150 then
-                            self.tooltip:setWidth(150)
-                        end
-                        -- Update the ISToolTipInv panel dimensions to match
-                        local tw = self.tooltip:getWidth()
-                        local th = self.tooltip:getHeight()
-                        self:setWidth(tw)
-                        self:setHeight(th)
                     end
                 end
-            end
-        end
-        print("ZItemTiers: Hooked into ISToolTipInv:render to append tier info")
-    end
-end
+            end -- render
+        } -- ISToolTipInv
+    }) -- zbHook
+end -- if not BetterClothingInfoActive
