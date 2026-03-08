@@ -563,6 +563,12 @@ function ZItemTiers.GetItemTierIndex(item)
     return result
 end
 
+-- Get the 0-based index of the tier for an item, 0 = Common, 1 = Uncommon, ...
+function ZItemTiers.GetItemTierIndex0(item)
+    local idx1 = ZItemTiers.GetItemTierIndex(item)
+    return idx1 - 1
+end
+
 -- Get tier key for an item (returns "Common" if no tier assigned or item is nil)
 ---@param item InventoryItem
 ---@return string
