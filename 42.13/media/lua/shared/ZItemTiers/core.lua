@@ -12,19 +12,21 @@ end
 -- Blacklist of items that should never have tier assigned
 -- Items in this list will never receive tier bonuses
 ZItemTiers.BlacklistedItems = {
-    ["Base.IDcard"] = true,
-    -- Keys (a key either works or it doesn't - no benefit from tier)
-    ["Base.Key1"] = true,
-    ["Base.Key_Blank"] = true,
+    ["Base.Brochure"]           = true,
+    ["Base.CarKey"]             = true,
     ["Base.CombinationPadlock"] = true,
-    ["Base.KeyPadlock"] = true,
-    ["Base.Padlock"] = true,
-    ["Base.CarKey"] = true,
-    ["Base.Brochure"] = true,
-    ["Base.Flier"] = true,
-    -- Maps (maps are informational items, no benefit from tier)
-    ["Base.Map"] = true,
-    ["Base.GolfTee"] = true,
+    ["Base.Flier"]              = true,
+    ["Base.GolfTee"]            = true,
+    ["Base.IDcard"]             = true,
+    ["Base.IDcard_Female"]      = true,
+    ["Base.IDcard_Male"]        = true,
+    ["Base.Key_Blank"]          = true,
+    ["Base.Key1"]               = true,
+    ["Base.KeyPadlock"]         = true,
+    ["Base.Map"]                = true,
+    ["Base.Padlock"]            = true,
+    ["Base.Splinters"]          = true,
+    ["Base.UnusableWood"]       = true,
     -- VHS tapes (blacklisted by pattern in IsItemBlacklisted; bonus commented out for now)
 }
 
