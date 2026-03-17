@@ -1,41 +1,20 @@
--- Item spawning and tier application hooks
--- Hooks into item creation events (OnFillContainer, OnContainerUpdate, OnGameStart)
--- to apply tier-based bonuses when items are spawned or loaded from save
-
 require "ZItemTiers/core"
-
-local function getOrCreateZIT(item)
-    if not item or not item.getModData then return nil end
-    
-    local modData = item:getModData()
-    if not modData then return nil end
-
-    if type(modData.ZIT) ~= "table" then
-        modData.ZIT = {}
-    end
-
-    return modData.ZIT
-end
+local logger = ZItemTiers.logger
 
 -- Helper function to apply tier to an item if it doesn't already have one
 -- If the item already has tier, re-apply bonuses (useful for migration/fixes)
 local function applyTierToItem(item, forceReapply)
-    local zit = getOrCreateZIT(item)
+    local zit = ZItemTiers.GetOrCreateZIT(item)
     if not zit then return end
     
     local itemType = item:getFullType()
     
     -- Skip items that were crafted with tier (they already have their tier set)
-    if zit.craftedFromTier then
-        if itemType and (string.find(itemType, "PetrolCan") or string.find(itemType, "GasCan")) then
-            print("ZItemTiers: [DEBUG] Skipping " .. itemType .. " - craftedFromTier=" .. tostring(zit.craftedFromTier))
-        end
-        return
-    end
+    if zit.craftedFromTier then return end
     
     -- Skip items that might be in the crafting process (check if crafting state exists)
     -- This prevents spawn_hooks from applying Common tier to items that are about to get crafting tier
-    if ZItemTiers and ZItemTiers._craftingState then
+    if ZItemTiers._craftingState then
         -- Check if any character is currently crafting (items might be created soon)
         local hasActiveCrafting = false
         for characterId, state in pairs(ZItemTiers._craftingState) do
@@ -49,7 +28,7 @@ local function applyTierToItem(item, forceReapply)
         if hasActiveCrafting and not zit.itemTier then
             -- Skip this item temporarily - crafting hook will apply tier within a few ticks
             -- This prevents spawn_hooks from applying Common tier before crafting hook applies Epic/Legendary/etc
-            print("ZItemTiers: [spawn_hooks] Skipping " .. tostring(itemType) .. " - crafting in progress (will be handled by crafting hook)")
+            logger:info("[spawn_hooks] Skipping %s - crafting in progress (will be handled by crafting hook)", itemType)
             return
         end
     end
@@ -74,7 +53,7 @@ local function applyTierToItem(item, forceReapply)
     -- Skip blacklisted items (keys, ID cards, etc.)
     if ZItemTiers.IsItemBlacklisted(item) then return end
     
-    ZItemTiers.ApplyTierBonuses(item, tier)
+    ZItemTiers.ApplyBonuses(item, tier)
 end
 
 -- Hook into OnFillContainer event to apply tier bonuses when items are spawned
@@ -110,189 +89,13 @@ Events.OnServerStarted.Add(hookFillContainer)
 -- This happens when items are loaded from save (load() resets customWeight to false, run speed modifier might get reset)
 -- For HandWeapon items, damage is applied from Lua, weight is handled by Java patch if available
 local function reapplyBonusesIfNeeded(item)
-    local zit = getOrCreateZIT(item)
+    local zit = ZItemTiers.GetOrCreateZIT(item)
     if not zit then return end
-    
-    if zit.itemTier then
-        if instanceof(item, "HandWeapon") then
-            -- For HandWeapon items:
-            -- - Damage is applied directly from Lua (setMinDamage/setMaxDamage)
-            -- - Weight is handled by Java patch if available, otherwise skipped
-            -- No need to re-apply anything - damage persists, weight is handled by Java patch
-            return
-        else
-            -- For non-HandWeapon items, check if bonuses need to be re-applied
-            local needsReapply = false
-            
-            -- Check encumbrance reduction (for containers)
-            if zit.itemEncumbranceReduction and instanceof(item, "InventoryContainer") then
-                local baseValues = zit.baseValues
-                local baseEncumbranceReduction = (baseValues and baseValues.encumbranceReductionBase) or (item.getWeightReduction and item:getWeightReduction()) or 0
-                local currentEncumbranceReduction = item.getWeightReduction and item:getWeightReduction() or baseEncumbranceReduction
-                local expectedValue = math.min(baseEncumbranceReduction + zit.itemEncumbranceReduction, 85)
-                if math.abs((currentEncumbranceReduction or baseEncumbranceReduction) - expectedValue) > 0.01 then
-                    needsReapply = true
-                end
-            end
-            
-            -- Check weight reduction (for non-container items)
-            if zit.itemWeightReduction and not instanceof(item, "InventoryContainer") then
-                local isCustom = item.isCustomWeight and item:isCustomWeight()
-                if not isCustom then
-                    needsReapply = true
-                end
-            end
-
-            -- Check run speed modifier (for all clothing items with run speed modifiers)
-            if instanceof(item, "Clothing") then
-                -- Get base run speed modifier using shared helper
-                local baseRunSpeedMod = ZItemTiers.GetBaseRunSpeedModifier(item, zit)
-                
-                -- Check if item has a non-default run speed modifier
-                if math.abs(baseRunSpeedMod - 1.0) > 0.001 then
-                    -- If item has tier but no run speed modifier bonus stored, it needs initial application
-                    local tier = zit.itemTier
-                    if tier and tier ~= "Common" then
-                        local bonuses = ZItemTiers and ZItemTiers.TierBonuses and ZItemTiers.TierBonuses[tier]
-                        if bonuses and bonuses.runSpeedModifier and not zit.itemRunSpeedModifierBonus then
-                            -- Item has tier but run speed modifier wasn't applied yet
-                            needsReapply = true
-                        elseif zit.itemRunSpeedModifierBonus then
-                            -- Check if run speed modifier needs re-application
-                            local currentRunSpeedMod = item.getRunSpeedModifier and item:getRunSpeedModifier() or baseRunSpeedMod
-                            local expectedValue = baseRunSpeedMod + zit.itemRunSpeedModifierBonus
-                                -- Cap at 1.0 if base was negative
-                                if baseRunSpeedMod < 1.0 then
-                                    expectedValue = math.min(expectedValue, 1.0)
-                                end
-                            if math.abs((currentRunSpeedMod or baseRunSpeedMod) - expectedValue) > 0.01 then
-                                needsReapply = true
-                            end
-                        end
-                    end
-                end
-            end
-
-            -- Check bite and scratch defense bonuses
-            if instanceof(item, "Clothing") then
-                local scriptItem = item.getScriptItem and item:getScriptItem() or nil
-                local baseBiteDefense = (scriptItem and scriptItem.biteDefense) or 0
-                local baseScratchDefense = (scriptItem and scriptItem.scratchDefense) or 0
-                
-                local tier = zit.itemTier
-                if tier and tier ~= "Common" then
-                    local bonuses = ZItemTiers and ZItemTiers.TierBonuses and ZItemTiers.TierBonuses[tier]
-                    if bonuses then
-                        -- Check if item needs initial defense bonus application (only if item has defense)
-                        if (bonuses.biteDefenseBonus and baseBiteDefense > 0 and not zit.itemBiteDefenseBonus) or
-                           (bonuses.scratchDefenseBonus and baseScratchDefense > 0 and not zit.itemScratchDefenseBonus) then
-                            needsReapply = true
-                        end
-                    end
-                end
-                
-                -- Check if stored bonuses need re-application (only if item has defense)
-                if zit.itemBiteDefenseBonus and baseBiteDefense > 0 then
-                    local currentBiteDefense = item.getBiteDefense and item:getBiteDefense() or baseBiteDefense
-                    local expectedValue = math.min(baseBiteDefense + zit.itemBiteDefenseBonus, 100)
-                    if math.abs((currentBiteDefense or baseBiteDefense) - expectedValue) > 0.01 then
-                        needsReapply = true
-                    end
-                end
-                if zit.itemScratchDefenseBonus and baseScratchDefense > 0 then
-                    local currentScratchDefense = item.getScratchDefense and item:getScratchDefense() or baseScratchDefense
-                    local expectedValue = math.min(baseScratchDefense + zit.itemScratchDefenseBonus, 100)
-                    if math.abs((currentScratchDefense or baseScratchDefense) - expectedValue) > 0.01 then
-                        needsReapply = true
-                    end
-                end
-            end
-
-            -- Check capacity bonus (for InventoryContainer items)
-            if zit.itemCapacityBonus and instanceof(item, "InventoryContainer") then
-                    -- Get base capacity: prefer stored base, then script item getter, then instance
-                    local baseCapacity = 0
-                    if zit.itemCapacityBase and zit.itemCapacityBase > 0 then
-                        baseCapacity = zit.itemCapacityBase
-                    else
-                        local scriptItem = item.getScriptItem and item:getScriptItem() or nil
-                        if scriptItem then
-                            if scriptItem.getCapacity then
-                                baseCapacity = scriptItem:getCapacity()
-                            elseif scriptItem.capacity then
-                                baseCapacity = scriptItem.capacity
-                            end
-                        end
-                    end
-
-                    local currentCapacity = (item.getCapacity and item:getCapacity()) or baseCapacity
-                    if baseCapacity and baseCapacity > 0 then
-                        -- Calculate expected capacity using percentage multiplier
-                        local capacityMultiplier = 1.0 + (zit.itemCapacityBonus / 100.0)
-                        local expectedValue = math.min(math.floor(baseCapacity * capacityMultiplier + 0.5), 50)
-                        if math.abs((currentCapacity or baseCapacity) - expectedValue) > 0.01 then
-                            needsReapply = true
-                        end
-                    end
-            end
-
-            -- Check max encumbrance bonus (for InventoryContainer items)
-            -- Note: This is handled by Java patch at runtime, but we should ensure zit has the bonus stored
-            if zit.itemTier and zit.itemTier ~= "Common" and instanceof(item, "InventoryContainer") then
-                local maxItemSize = (item.getMaxItemSize and item:getMaxItemSize()) or 0
-                if maxItemSize > 0 then
-                        -- Check if bonus should be stored but isn't
-                        local tier = zit.itemTier
-                        local bonuses = ZItemTiers and ZItemTiers.TierBonuses and ZItemTiers.TierBonuses[tier]
-                        if bonuses and bonuses.maxEncumbranceBonus and not zit.itemMaxEncumbranceBonus then
-                            -- Bonus is missing, needs reapplication
-                            needsReapply = true
-                            print("ZItemTiers: Max encumbrance bonus missing for " .. tier .. " container, will reapply")
-                        end
-                end
-            end
-
-            -- Check drainable capacity bonus (for Drainable items)
-                if zit.itemDrainableCapacityBonus then
-                    local fluidContainer = item.getFluidContainer and item:getFluidContainer() or nil
-                    if fluidContainer then
-                        local baseCapacity = zit.itemDrainableCapacityBase or 0
-                        if not zit.itemDrainableCapacityBase and fluidContainer.getCapacity then
-                            baseCapacity = fluidContainer:getCapacity() or 0
-                        end
-                        local currentCapacity = (fluidContainer.getCapacity and fluidContainer:getCapacity()) or baseCapacity
-                        if baseCapacity > 0 then
-                            -- Calculate expected capacity: base * (1 + bonus percentage / 100)
-                            local expectedCapacity = baseCapacity * (1 + zit.itemDrainableCapacityBonus / 100.0)
-                            if math.abs((currentCapacity or baseCapacity) - expectedCapacity) > 0.01 then
-                                needsReapply = true
-                            end
-                        end
-                    end
-                else
-                    -- Check if bonus should be stored but isn't (for drainable items with tier)
-                    local tier = zit.itemTier
-                    if tier and tier ~= "Common" then
-                        local bonuses = ZItemTiers and ZItemTiers.TierBonuses and ZItemTiers.TierBonuses[tier]
-                        if bonuses and bonuses.drainableCapacityBonus and item.getFluidContainer and item:getFluidContainer() then
-                            needsReapply = true
-                        end
-                    end
-                end
-            
-            if needsReapply then
-                local tier = zit.itemTier
-                if ZItemTiers and ZItemTiers.ApplyTierBonuses then
-                    ZItemTiers.ApplyTierBonuses(item, tier)
-                end
-            end
-        end
-    end
 end
 
 -- Process world items on a square (items laying on the ground)
 local function processSquareWorldItems(square)
-    if not square then return end
+    logger:debug("processSquareWorldItems(%s)", square)
     
     local worldObjects = square:getWorldObjects()
     if not worldObjects then return end
@@ -302,8 +105,7 @@ local function processSquareWorldItems(square)
         if worldObj and worldObj.getItem then
             local item = worldObj:getItem()
             if item then
-            local itemTypeStr = item:getFullType() or "unknown"
-            print("ZItemTiers: [DEBUG] Checking world item: " .. itemTypeStr)
+                local itemTypeStr = item:getFullType() or "unknown"
                 applyTierToItem(item, true) -- Force re-apply bonuses (for items loaded from save)
                 reapplyBonusesIfNeeded(item)
             end
@@ -325,7 +127,6 @@ local function processContainerItems(container)
         local item = items:get(i)
         if item then
             local itemTypeStr = item:getFullType() or "unknown"
-            print("ZItemTiers: [DEBUG] Checking item: " .. itemTypeStr)
             applyTierToItem(item, true) -- Force re-apply bonuses (for items loaded from save)
             reapplyBonusesIfNeeded(item)
         end
@@ -338,8 +139,9 @@ end
 -- - Items are added/removed from containers
 -- - Items are picked up from ground (added to inventory)
 -- - Floor container is accessed (world items on the ground)
--- Event signature: (container)
---local function onContainerUpdate(container)
+-- XXX: does not get called???
+local function onContainerUpdate(container)
+    logger:debug("onContainerUpdate(%s)", container)
 --    if not ZItemTiers then return end
 --    if not container then return end
 --    
@@ -380,10 +182,10 @@ end
 --        -- Process all items in the container when it's updated
 --        processContainerItems(container)
 --    end
---end
+end
 
 -- Hook into OnContainerUpdate event
---Events.OnContainerUpdate.Add(onContainerUpdate)
+Events.OnContainerUpdate.Add(onContainerUpdate)
 
 -- Hook into ISInventoryPane:refreshContainer to ensure bonuses are applied when inventory is viewed
 -- This catches cases where items exist but bonuses weren't applied
@@ -407,7 +209,7 @@ end
 --                    local item = items:get(i)
 --                    if item then
 --                        -- Check if item has tier but bonuses might not be applied
---                        local zit = getOrCreateZIT(item)
+--                        local zit = ZItemTiers.GetOrCreateZIT(item)
 --                        if zit and zit.itemTier then
 --                            -- Force re-apply bonuses to ensure they're all applied
 --                            reapplyBonusesIfNeeded(item)
@@ -421,42 +223,19 @@ end
 --    end
 --end
 
-
 local function onGameStart()
-    -- Ensure ZItemTiers is initialized
-    if not ZItemTiers then return end
-    
-    -- Only run once per game session
-    if ZItemTiers._migrationRun then return end
-    ZItemTiers._migrationRun = true
-    
     -- Process items in player inventory on game start
-    local player = getPlayer()
+    local player = getPlayer() -- TODO: MP
     if player then
         local inv = player:getInventory()
         if inv then
             processContainerItems(inv)
         end
-        
-        -- Also process world items on the player's current square and adjacent squares
-        local square = player:getCurrentSquare()
-        if square then
-            -- Process world items on the player's current square
-            processSquareWorldItems(square)
-            -- Also process adjacent squares (items might be on nearby squares)
-            for dx = -1, 1 do
-                for dy = -1, 1 do
-                    if not (dx == 0 and dy == 0) then
-                        local adjSquare = getCell():getGridSquare(square:getX() + dx, square:getY() + dy, square:getZ())
-                        if adjSquare then
-                            processSquareWorldItems(adjSquare)
-                        end
-                    end
-                end
-            end
-        end
     end
 end
+Events.OnGameStart.Add(onGameStart)
 
--- Hook into OnGameStart event for migration
---Events.OnGameStart.Add(onGameStart)
+-- most of the item's bonuses are inherited from corresponding ScriptItem, and not saved into savefile,
+-- so we need to re-apply them when square is loaded.
+-- can happen multiple times per game session even with the same square, if player moves far away and back
+-- Events.LoadGridsquare.Add(processSquareWorldItems)

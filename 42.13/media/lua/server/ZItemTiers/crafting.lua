@@ -264,14 +264,12 @@ RecipeManager.PerformMakeItem = function(recipe, item, character, containers)
             local createdItem = result:get(i)
             if createdItem and not ZItemTiers.IsItemBlacklisted(createdItem) then
                 -- Store tier in modData FIRST to prevent spawn_hooks from overriding it
-                local modData = createdItem:getModData()
-                if modData then
-                    modData.itemTier = outputTier
-                    modData.craftedFromTier = true  -- Flag to indicate this was crafted
-                end
+                local newZIT = ZItemTiers.GetOrCreateZIT(createdItem)
+                newZIT.itemTier = outputTier
+                newZIT.craftedFromTier = true  -- Flag to indicate this was crafted
                 
                 -- Apply the calculated tier
-                ZItemTiers.ApplyTierBonuses(createdItem, outputTier)
+                ZItemTiers.ApplyBonuses(createdItem, outputTier)
                 
                 -- Verify tier was applied
                 local verifyTier = ZItemTiers.GetItemTierKey(createdItem)
@@ -560,9 +558,7 @@ if ISHandcraftAction and ISHandcraftAction.performRecipe then
                                     end
                                 end
                                 
-                                if ZItemTiers and ZItemTiers.ApplyTierBonuses then
-                                    ZItemTiers.ApplyTierBonuses(item, state.tier)
-                                end
+                                ZItemTiers.ApplyBonuses(item, state.tier)
                                 print("ZItemTiers: [ISHandcraftAction] Applied tier " .. state.tier .. " to created item: " .. itemType)
                             else
                                 print("ZItemTiers: [ISHandcraftAction] Item already has tier: " .. tostring(currentTier) .. " (skipping)")
@@ -647,9 +643,7 @@ if ISHandcraftAction and ISHandcraftAction.performRecipe then
                                                         print("ZItemTiers: [ISHandcraftAction] OnTick (tick " .. cleanupTicks .. "): Applying tier " .. state.tier .. " to new item: " .. itemType .. " (was: " .. tostring(currentTier) .. ")")
                                                         modData.itemTier = state.tier
                                                         modData.craftedFromTier = true
-                                                        if ZItemTiers and ZItemTiers.ApplyTierBonuses then
-                                                            ZItemTiers.ApplyTierBonuses(item, state.tier)
-                                                        end
+                                                        ZItemTiers.ApplyBonuses(item, state.tier)
                                                         foundItem = true
                                                         _craftingState[cleanupCharacterId] = nil
                                                         print("ZItemTiers: [ISHandcraftAction] OnTick: Cleaned up crafting state after finding item")
@@ -797,13 +791,8 @@ if originalAddOrDropItem then
                             print("ZItemTiers: [addOrDropItem] Applying tier " .. tierToApply .. " to crafted item: " .. tostring(itemType) .. " (was: " .. tostring(currentTier) .. ")")
                             modData.itemTier = tierToApply
                                 modData.craftedFromTier = true
-                                
-                                -- Apply the calculated tier bonuses
-                                if ZItemTiers and ZItemTiers.ApplyTierBonuses then
-                                ZItemTiers.ApplyTierBonuses(item, tierToApply)
-                                end
-                                
-                            print("ZItemTiers: [addOrDropItem] Applied tier " .. tierToApply .. " to crafted item: " .. tostring(itemType))
+                                ZItemTiers.ApplyBonuses(item, tierToApply)
+                                print("ZItemTiers: [addOrDropItem] Applied tier " .. tierToApply .. " to crafted item: " .. tostring(itemType))
                             else
                                 print("ZItemTiers: [addOrDropItem] Item already has tier: " .. tostring(currentTier) .. " (skipping)")
                             end
@@ -905,11 +894,10 @@ local function onContainerUpdateForCrafting(container)
                                 if shouldApply then
                                     foundNewItems = true
                                     print("ZItemTiers: [OnContainerUpdate] Applying tier " .. state.tier .. " to item: " .. itemType .. " (was: " .. currentTier .. ")")
-                                    modData.itemTier = state.tier
-                                    modData.craftedFromTier = true
-                                    if ZItemTiers and ZItemTiers.ApplyTierBonuses then
-                                        ZItemTiers.ApplyTierBonuses(item, state.tier)
-                                    end
+                                    local zit = ZItemTiers.GetOrCreateZIT(item)
+                                    zit.itemTier = state.tier
+                                    zit.craftedFromTier = true
+                                    ZItemTiers.ApplyBonuses(item)
                                     print("ZItemTiers: [OnContainerUpdate] Applied tier " .. state.tier .. " to OnCreate-crafted item: " .. itemType)
                                 else
                                     -- Debug: log why we didn't apply
@@ -949,5 +937,4 @@ local function onContainerUpdateForCrafting(container)
     end
 end
 
--- Hook into OnContainerUpdate event (add our handler, don't replace existing ones)
 Events.OnContainerUpdate.Add(onContainerUpdateForCrafting)

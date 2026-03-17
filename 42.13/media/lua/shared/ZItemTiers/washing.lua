@@ -95,22 +95,18 @@ local function setupWashingHook()
                     end)
                     
                     if successGetType and itemType == storedReplaceOnUse then
-                        local newModData = newItem:getModData()
-                        if newModData then
-                            local currentTier = newModData.itemTier
-                            -- Apply tier if item doesn't have it yet, or if it's Common (spawn_hooks might have set it)
-                            if not currentTier or currentTier == "Common" then
-                                newModData.itemTier = storedTier
-                                newModData.craftedFromTier = true
-                                
-                                -- Apply the tier bonuses
-                                if ZItemTiers and ZItemTiers.ApplyTierBonuses then
-                                    ZItemTiers.ApplyTierBonuses(newItem, storedTier)
-                                end
-                                
-                                print("ZItemTiers: [Washing] Preserved tier " .. storedTier .. " for washed item: " .. itemType)
-                                return true
-                            end
+                        local newZIT = ZItemTiers.GetOrCreateZIT(newItem)
+                        local currentTier = newZIT.itemTier
+                        -- Apply tier if item doesn't have it yet, or if it's Common (spawn_hooks might have set it)
+                        if not currentTier or currentTier == "Common" then
+                            newZIT.itemTier = storedTier
+                            newZIT.craftedFromTier = true
+
+                            -- Apply the tier bonuses
+                            ZItemTiers.ApplyBonuses(newItem, storedTier)
+
+                            print("ZItemTiers: [Washing] Preserved tier " .. storedTier .. " for washed item: " .. itemType)
+                            return true
                         end
                     end
                 end

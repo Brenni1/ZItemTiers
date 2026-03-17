@@ -1,13 +1,6 @@
--- Item Tier Mod
--- Adds tier-based bonus system to items
--- Each item can spawn with any tier based on probability, not hardcoded item-to-tier mapping
-
 ZItemTiers = ZItemTiers or {}
-
--- Initialize global session ID for bonus tracking (initialized once per game session)
-if not ZItemTiers._bonusesAppliedSessionId then
-    ZItemTiers._bonusesAppliedSessionId = ZombRand(1000000)
-end
+ZItemTiers.logger = ZItemTiers.logger or ZBLogger.new("ZItemTiers", ZBLogger.DEBUG)
+local logger = ZItemTiers.logger
 
 -- Blacklist of items that should never have tier assigned
 -- Items in this list will never receive tier bonuses
@@ -29,6 +22,12 @@ ZItemTiers.BlacklistedItems = {
     ["Base.UnusableWood"]       = true,
     -- VHS tapes (blacklisted by pattern in IsItemBlacklisted; bonus commented out for now)
 }
+
+-- TODO: remove?
+-- Initialize global session ID for bonus tracking (initialized once per game session)
+if not ZItemTiers._bonusesAppliedSessionId then
+    ZItemTiers._bonusesAppliedSessionId = ZombRand(1000000)
+end
 
 -- Tier probabilities: [Common, Uncommon, Rare, Epic, Legendary]
 -- These determine the chance that an item will be assigned each tier when it spawns
@@ -68,84 +67,160 @@ ZItemTiers.Tiers = {
     },
 }
 
--- Fixed tier-based bonuses
--- These bonuses are applied to ALL items of that tier, regardless of item type
--- For HandWeapon items: damage is applied directly from Lua, weight requires Java patches
--- For other items: weight reduction is applied directly
--- For shoes (Clothing with SHOES body location): run speed modifier is applied
-ZItemTiers.TierBonuses = {
-    Common = {
-        -- No bonuses for Common items
-    },
-    Uncommon = {
-        weightReduction = 10,  -- 10% weight reduction (for item's own weight)
-        encumbranceReduction = 2,  -- +2 encumbrance reduction (for InventoryContainer, reduces weight of items inside)
-        damageMultiplier = 1.1,  -- 10% more damage (for HandWeapon)
-        runSpeedModifier = 0.1,  -- +0.1 run speed (for clothing with run speed modifier)
-        biteDefenseBonus = 5,  -- +5 bite defense (for Clothing)
-        scratchDefenseBonus = 5,  -- +5 scratch defense (for Clothing)
-        capacityBonus = 10,  -- +10% capacity (for InventoryContainer)
-        maxEncumbranceBonus = 0.1,  -- +0.1 maximum item encumbrance (for InventoryContainer)
-        drainableCapacityBonus = 10,  -- +10% capacity (for Drainable items)
-        visionImpairmentReduction = 0.05,  -- -0.05 vision impairment (for Clothing with vision impairment)
-        hearingImpairmentReduction = 0.05,  -- -0.05 hearing impairment (for Clothing with hearing impairment)
-        moodBonus = 0.1,  -- +10% mood benefits (boredom/unhappiness/stress reduction) for Literature items
-        readingSpeedBonus = 0.1,  -- +10% reading speed (reduces reading time) for Literature items
-        -- vhsSkillXpBonus = 50,  -- +50 skill XP (total per cassette) for VHS tapes (commented out; VHS blacklisted for now)
-        batteryConsumptionReduction = 0.1,  -- 10% less battery consumption (for ElectricLight/Torch flashlights)
-    },
-    Rare = {
-        weightReduction = 20,  -- 20% weight reduction (for item's own weight)
-        encumbranceReduction = 4,  -- +4 encumbrance reduction (for InventoryContainer, reduces weight of items inside)
-        damageMultiplier = 1.2,  -- 20% more damage (for HandWeapon)
-        runSpeedModifier = 0.2,  -- +0.2 run speed (for clothing with run speed modifier)
-        biteDefenseBonus = 10,  -- +10 bite defense (for Clothing)
-        scratchDefenseBonus = 10,  -- +10 scratch defense (for Clothing)
-        capacityBonus = 20,  -- +20% capacity (for InventoryContainer)
-        maxEncumbranceBonus = 0.2,  -- +0.2 maximum item encumbrance (for InventoryContainer)
-        drainableCapacityBonus = 20,  -- +20% capacity (for Drainable items)
-        visionImpairmentReduction = 0.10,  -- -0.10 vision impairment (for Clothing with vision impairment)
-        hearingImpairmentReduction = 0.10,  -- -0.10 hearing impairment (for Clothing with hearing impairment)
-        moodBonus = 0.2,  -- +20% mood benefits (boredom/unhappiness/stress reduction) for Literature items
-        readingSpeedBonus = 0.2,  -- +20% reading speed (reduces reading time) for Literature items
-        -- vhsSkillXpBonus = 100,  -- +100 skill XP (total per cassette) for VHS tapes (commented out; VHS blacklisted for now)
-        batteryConsumptionReduction = 0.2,  -- 20% less battery consumption (for ElectricLight/Torch flashlights)
-    },
-    Epic = {
-        weightReduction = 30,  -- 30% weight reduction (for item's own weight)
-        encumbranceReduction = 6,  -- +6 encumbrance reduction (for InventoryContainer, reduces weight of items inside)
-        damageMultiplier = 1.4,  -- 40% more damage (for HandWeapon)
-        runSpeedModifier = 0.3,  -- +0.3 run speed (for clothing with run speed modifier)
-        biteDefenseBonus = 15,  -- +15 bite defense (for Clothing)
-        scratchDefenseBonus = 15,  -- +15 scratch defense (for Clothing)
-        capacityBonus = 30,  -- +30% capacity (for InventoryContainer)
-        maxEncumbranceBonus = 0.3,  -- +0.3 maximum item encumbrance (for InventoryContainer)
-        drainableCapacityBonus = 30,  -- +30% capacity (for Drainable items)
-        visionImpairmentReduction = 0.15,  -- -0.15 vision impairment (for Clothing with vision impairment)
-        hearingImpairmentReduction = 0.15,  -- -0.15 hearing impairment (for Clothing with hearing impairment)
-        moodBonus = 0.3,  -- +30% mood benefits (boredom/unhappiness/stress reduction) for Literature items
-        readingSpeedBonus = 0.3,  -- +30% reading speed (reduces reading time) for Literature items
-        -- vhsSkillXpBonus = 150,  -- +150 skill XP (total per cassette) for VHS tapes (commented out; VHS blacklisted for now)
-        batteryConsumptionReduction = 0.3,  -- 30% less battery consumption (for ElectricLight/Torch flashlights)
-    },
-    Legendary = {
-        weightReduction = 50,  -- 50% weight reduction (for item's own weight)
-        encumbranceReduction = 8,  -- +8 encumbrance reduction (for InventoryContainer, reduces weight of items inside)
-        damageMultiplier = 1.6,  -- 60% more damage (for HandWeapon)
-        runSpeedModifier = 0.4,  -- +0.4 run speed (for clothing with run speed modifier)
-        biteDefenseBonus = 20,  -- +20 bite defense (for Clothing)
-        scratchDefenseBonus = 20,  -- +20 scratch defense (for Clothing)
-        capacityBonus = 50, -- +50% capacity (for InventoryContainer)
-        maxEncumbranceBonus = 0.5, -- +0.5 maximum item encumbrance (for InventoryContainer)
-        drainableCapacityBonus = 50,  -- +50% capacity (for Drainable items)
-        visionImpairmentReduction = 0.25,  -- -0.25 vision impairment (for Clothing with vision impairment)
-        hearingImpairmentReduction = 0.25,  -- -0.25 hearing impairment (for Clothing with hearing impairment)
-        batteryConsumptionReduction = 0.5,  -- 50% less battery consumption (for ElectricLight/Torch flashlights)
-        moodBonus = 0.5,  -- +50% mood benefits (boredom/unhappiness/stress reduction) for Literature items
-        readingSpeedBonus = 0.5,  -- +50% reading speed (reduces reading time) for Literature items
-        -- vhsSkillXpBonus = 250,  -- +250 skill XP (total per cassette) for VHS tapes (commented out; VHS blacklisted for now)
-    },
+local TIER_NAMES = { "Common", "Uncommon", "Rare", "Epic", "Legendary" }
+
+function ZItemTiers.GetTierNameFromT0(t0)
+    return TIER_NAMES[t0 + 1]
+end
+
+function ZItemTiers.GetT0FromTierName(tierName)
+    return ZItemTiers.Tiers[tierName].index - 1
+end
+
+-- common  uncomm  rare    epic    legendary
+-- 0.010   0.015   0.020   0.026   0.031
+-- 0.230   0.241   0.252   0.262   0.273
+-- 0.500   0.518   0.535   0.552   0.570
+-- 0.800   0.825   0.850   0.875   0.900
+-- 0.900   0.928   0.955   0.982   1.010
+local function affine_scale(base, t0, maxValue)
+    if base <= 0 or (maxValue and base >= maxValue) then return base end
+
+    local value = base * (1 + 0.025 * t0) + 0.005*t0
+    if maxValue and value > maxValue then
+        value = maxValue
+    end
+    return value
+end
+
+local function neg_affine_scale(base, t0, minValue)
+    if base <= 0 or (minValue and base <= minValue) then return base end
+
+    local value = base * (1 - 0.025 * t0) - 0.005*t0
+    if minValue then
+        if value < minValue then value = minValue end
+    else
+        if value < 0 then value = base end -- XXX maybe cap to last positive value?
+    end
+    return value
+end
+
+local function clamp(_value, _min, _max)
+    if not _min then _min = _value end
+    if not _max then _max = _value end
+    return math.min(math.max(_value, _min), _max)
+end
+
+local max = math.max
+
+-- "_ in Lua is like a napkin at dinner: completely ordinary, but everyone silently agrees what it’s for." (c) ChatGPT
+local _ = nil
+
+--                                                                                                        rg -iIo '\sBiteDefense\s*=.+' -g "*.txt" | sort | uniq -c | sort -n +3
+ZItemTiers.Bonuses = {
+    CombatSpeedModifier       = function(base, t0) return clamp(base + 0.01 * t0, _, base < 1 and 1) end,        -- 0.90 .. 0.99
+    -- needs java patch, see IsoGameCharacter.updateDiscomfortModifiers() as well
+    DiscomfortModifier        = function(base, t0) return clamp(base - 0.05 * t0, 0, _) end,                     -- 0.02 .. 0.75
+    NeckProtectionModifier    = function(base, t0) return clamp(base + 0.05 * t0, _, 1) end,                     -- 0.30 .. 0.50
+    RunSpeedModifier          = function(base, t0) return clamp(base + 0.05 * t0, _, base < 1 and 1) end,        -- 0.70 .. 1.10
+    VisionModifier            = function(base, t0) return clamp(base + 0.05 * t0, _, 1) end,                     -- 0.25 .. 0.75
+                                                                                                                 
+    Insulation                = function(base, t0) return clamp(base + 0.05 * t0, _, 1) end,                     -- 0.05 .. 1.00
+    WaterResistance           = function(base, t0) return clamp(base + 0.05 * t0, _, 1) end,                     -- 0.20 .. 1.00
+    Windresistance            = function(base, t0) return clamp(base + 0.05 * t0, _, 1) end,                     -- 0.10 .. 1.00
+                                                                                                                 
+    BiteDefense               = function(base, t0) return clamp(base + 5 * t0, _, 100) end,                      --    7 .. 100
+    BulletDefense             = function(base, t0) return clamp(base + 5 * t0, _, 100) end,                      --    5 .. 100
+    CorpseSicknessDefense     = function(base, t0) return clamp(base + 5 * t0, _, 100) end,                      --   25
+    ScratchDefense            = function(base, t0) return clamp(base + 5 * t0, _, 100) end,                      --    5 .. 100
+                                                                                                                 
+    -- TODO: FluidContainer.Capacity   =  0.10 .. 600   = base * (1 + 0.25 * t0)                                 
+    Capacity                  = function(base, t0) return base * (1 + 0.125 * t0) end,                           --    1 .. 35
+    MaxItemSize               = function(base, t0) return base * (1 + 0.25 * t0) end,                            -- 0.20 .. 2.00
+    Weight                    = function(base, t0) return clamp(base * (1 - 0.05 * t0), 0, _) end,               -- 0.001 . 50
+    WeightReduction           = function(base, t0) return clamp(base + 5 * t0, 0, max(base, 90)) end,            --   30 .. 90
+
+    UseDelta                  = function(base, t0) return base < 1 and clamp(base * (1 - 0.125 * t0), 0, _) end, -- 0.00001 .. 1.0
+
+    RecoilDelay               = function(base, t0) return clamp(base - t0, 0, _) end,                            -- 11 .. 33
+    ReloadTime                = function(base, t0) return clamp(base - 2 * t0, 0, _) end,                        -- 25 .. 30
+                                                                                                                
+    -- ConditionLowerChance
+    ConditionLowerChanceOneIn = function(base, t0) return base + t0 end,                                         --  6 .. 8
+    ConditionMax              = function(base, t0) return base + t0 end,                                         -- 10 .. 12
+                                                                                                                
+    ChanceToFall              = function(base, t0) return clamp(base - 5 * t0, 0, _) end,                        --  0 .. 80
+                                                                                                                
+    JamGunChance              = function(base, t0) return clamp(base - 0.25 * t0, 0, _) end,                     --  0 .. 2
+    CriticalChance            = function(base, t0) return base > 0 and clamp(base + 5 * t0, 0, 90) end,          -- 0,  5 .. 70
+    HitChance                 = function(base, t0) return base > 0 and clamp(base + 5 * t0, 0, 95) end,          -- 0, 45 .. 70
+                                                                                                                
+    AimingTimeModifier        = function(base, t0) return base ~= 0 and base - 0.5 * t0 end,                     -- -10  .. 20
+    MaxRangeModifier          = function(base, t0) return base ~= 0 and base + 0.2 * t0 end,                     -- -0.8 ..  7
+    RecoilDelayModifier       = function(base, t0) return base * (1 + 0.25 * t0) end,                            -- -2
+    WeightModifier            = function(base, t0) return base * (1 - 0.05 * t0) end,                            --  0  .. 0.8
+                                                                                                                
+    TreeDamage                = function(base, t0) return base > 0 and base * (1 + 0.05 * t0) end,               --  1    .. 55
+    BaseSpeed                 = function(base, t0) return base - 0.05 * t0 end,                                  --  0.7  ..  1.4
+    -- CriticalDamageMultiplier
+    CritDmgMultiplier         = function(base, t0) return base + 0.5 * t0 end,                                   --  1    .. 12
+    MaxDamage                 = function(base, t0) return affine_scale(base, t0, _) end,                         --  0.1  ..  8
+    MaxRange                  = function(base, t0) return affine_scale(base, t0, _) end,                         --  0.6  .. 40
+    PushBackMod               = function(base, t0) return base > 0 and affine_scale(base, t0, 1.0) end,          --  0    ..  1
+    SwingTime                 = function(base, t0) return neg_affine_scale(base, t0, _) end,                     --  0.5  ..  4
+    MinimumSwingTime          = function(base, t0) return neg_affine_scale(base, t0, _) end,                     --  0.5  ..  4
+    WeaponLength              = function(base, t0) return affine_scale(base, t0, _) end,                         --  0.15 ..  0.7
+    StompPower                = function(base, t0) return base * (1 + 0.05 * t0) end,                            --  0.8  .. 2.5
+                                                                                                                
+    -- AlcoholedCottonBalls/AlcoholWipes                                                                        
+    AlcoholPower              = function(base, t0) return base * (1 + 0.125 * t0) end,                           -- 4
+    BandagePower              = function(base, t0) return base * (1 + 0.125 * t0) end,                           -- 0.5 .. 4
+
+    FatigueChange             = function(base, t0) return base ~= 0 and base - math.abs(base) * 0.25 * t0 end,   --  -50 ..  -10
+    StressChange              = function(base, t0) return base ~= 0 and base - math.abs(base) * 0.25 * t0 end,   --  -20 ..    1
+    BoredomChange             = function(base, t0) return base ~= 0 and base - math.abs(base) * 0.25 * t0 end,   --  -50 ..   20
+    -- HungChange
+    HungerChange              = function(base, t0) return base ~= 0 and base - math.abs(base) * 0.25 * t0 end,   --   -1 .. -160
+    ThirstChange              = function(base, t0) return base ~= 0 and base - math.abs(base) * 0.25 * t0 end,   -- -140 ..   60
+    UnhappyChange             = function(base, t0) return base ~= 0 and base - math.abs(base) * 0.25 * t0 end,   --  -50 ..  500
+                                                                                                                 
+    fluReduction              = function(base, t0) return base * (1 + 0.25 * t0) end,                            -- 5
+    painReduction             = function(base, t0) return base * (1 + 0.25 * t0) end,                            -- 7
+                                                                                                                 
+    DaysFresh                 = function(base, t0) return base > 0 and base * (1 + 0.25 * t0) end,               -- 0 .. 365
+    DaysTotallyRotten         = function(base, t0) return base > 0 and base * (1 + 0.25 * t0) end,               -- 0 .. 730
 }
+
+local SETTER_ALIASES = {
+    AimingTimeModifier        = "AimingTime",
+    ConditionLowerChanceOneIn = "ConditionLowerChance",
+    CritDmgMultiplier         = "CriticalDamageMultiplier",
+    HungerChange              = "HungChange",
+    MaxRangeModifier          = "MaxRange",
+}
+
+function ZItemTiers.GetOrCreateZIT(item)
+    if not item or not item.getModData then return nil end
+    
+    local modData = item:getModData()
+    if not modData then return nil end
+
+    if type(modData.ZIT) ~= "table" then
+        modData.ZIT = {}
+    end
+
+    local zit = modData.ZIT
+
+    -- migrate old itemTier
+    if modData.itemTier and not zit.itemTier then
+        zit.itemTier = modData.itemTier
+        if modData.craftedFromTier then
+            zit.craftedFromTier = modData.craftedFromTier
+        end
+    end
+
+    return zit
+end
 
 -- Roll a random tier based on tier probabilities
 function ZItemTiers.RollTier()
@@ -233,314 +308,75 @@ function ZItemTiers.GetBaseRunSpeedModifier(item, modData)
     return base
 end
 
--- Apply fixed tier-based bonuses to an item
-function ZItemTiers.ApplyTierBonuses(item, tier)
-    if not item then return end
-    
-    local itemType = item:getFullType()
-    
-    -- Check if this is a VHS item for logging
-    local isVHS = false
-    if itemType and string.find(itemType, "VHS") then
-        isVHS = true
-    end
-    
-    local tierData = ZItemTiers.Tiers[tier]
-    if not tierData then 
-        if isVHS then
-            print("ZItemTiers: [VHS] ERROR: No tier data for " .. itemType .. " tier " .. tostring(tier))
+-- returns smth like:
+-- {
+--    "carbohydrates" => 72,
+--           "lipids" => 45,
+--         "proteins" => 4.5,
+--    "unhappychange" => -5,
+--           "weight" => 0.2,
+--         "calories" => 720,
+--     "hungerchange" => -15
+--}
+function ZItemTiers.ParseItemScript(item)
+    local result = {}
+    local scriptItem = item:getScriptItem()
+    local lines = scriptItem:getScriptLines()
+    for i=0,lines:size()-1 do
+        local line = lines:get(i):gsub("[\t ,]", ""):lower()
+        local a = line:split("=")
+        if a and #a == 2 then
+            local num = tonumber(a[2])
+            if num then
+                result[a[1]] = num
+            end
         end
-        return 
     end
-    
-    local bonuses = ZItemTiers.TierBonuses[tier]
-    if not bonuses then 
-        if isVHS then
-            print("ZItemTiers: [VHS] ERROR: No bonuses for " .. itemType .. " tier " .. tostring(tier))
-        end
-        return 
+    return result
+end
+
+function ZItemTiers.ApplyBonuses(item, forceTier)
+    if forceTier then
+        ZItemTiers.SetItemTier(item, forceTier)
     end
-    
-    -- Get modData first to check if bonuses have already been applied
-    local modData = item:getModData()
-    if not modData then 
-        if isVHS then
-            print("ZItemTiers: [VHS] ERROR: No modData for " .. itemType)
-        end
-        return 
-    end
-    
-    -- Check if this exact tier and bonuses have already been applied in this game session
-    -- Compare with global session ID to ensure bonuses were applied in the current session
-    if modData.itemTier == tier and modData._bonusesApplied == ZItemTiers._bonusesAppliedSessionId then
-        -- Bonuses already applied for this tier in this session, skip
-        if isVHS then
-            print("ZItemTiers: [VHS] Bonuses already applied for " .. itemType .. " (tier: " .. tostring(tier) .. ", session: " .. tostring(modData._bonusesApplied) .. ")")
-        end
+    local t0 = ZItemTiers.GetItemTierIndex0(item)
+    if t0 == 0 then return end -- No bonuses for Common tier
+
+--    logger:debug("Applying tier %d (%s) to %s", t0, ZItemTiers.GetTierNameFromT0(t0), item)
+    if t0 <= 0 then
+        logger:error("Invalid tier index %d for item %s, skipping bonuses", t0, item)
         return
     end
-    
-    -- If session ID doesn't match, reset base capacity values to force recalculation
-    -- This prevents using incorrect base values from previous sessions
-    -- Only reset for drainable items to avoid unnecessary messages
-    if modData._bonusesApplied and modData._bonusesApplied ~= ZItemTiers._bonusesAppliedSessionId then
-        -- Check if this is a drainable item before resetting
-        local isDrainable = item.getFluidContainer and item:getFluidContainer() ~= nil
-        if isDrainable then
-            isDrainable = true
-            modData.itemDrainableCapacityBase = nil
-            print("ZItemTiers: Session ID changed, resetting base capacity for drainable item: " .. tostring(item:getFullType()))
-        end
-    end
-    
-    -- Store tier in modData
-    modData.itemTier = tier
-    
-    -- Store the target weight reduction percentage so we can re-apply it if weight gets reset
-    if bonuses.weightReduction then
-        modData.itemWeightReduction = bonuses.weightReduction
-    end
-    -- Store encumbrance reduction bonus so we can re-apply it if it gets reset
-    if bonuses.encumbranceReduction then
-        modData.itemEncumbranceReduction = bonuses.encumbranceReduction
-    end
-    -- Store the run speed modifier bonus and base value so we can re-apply it if it gets reset
-    if bonuses.runSpeedModifier then
-        modData.itemRunSpeedModifierBonus = bonuses.runSpeedModifier
-        -- Store base value using the shared helper (tries getter, field, instance)
-        ZItemTiers.GetBaseRunSpeedModifier(item, modData)
-    end
-    -- Store capacity bonus so we can re-apply it if it gets reset
-    if bonuses.capacityBonus then
-        modData.itemCapacityBonus = bonuses.capacityBonus
-    end
-    -- Store max encumbrance bonus so we can re-apply it if it gets reset
-    if bonuses.maxEncumbranceBonus then
-        modData.itemMaxEncumbranceBonus = bonuses.maxEncumbranceBonus
-    end
-    -- Store defense bonuses so we can re-apply them if they get reset
-    if bonuses.biteDefenseBonus then
-        modData.itemBiteDefenseBonus = bonuses.biteDefenseBonus
-    end
-    if bonuses.scratchDefenseBonus then
-        modData.itemScratchDefenseBonus = bonuses.scratchDefenseBonus
-    end
-    -- Store drainable capacity bonus so we can re-apply it if it gets reset
-    if bonuses.drainableCapacityBonus then
-        modData.itemDrainableCapacityBonus = bonuses.drainableCapacityBonus
-    end
-    
-    -- Store vision impairment reduction so we can re-apply it if it gets reset
-    if bonuses.visionImpairmentReduction then
-        modData.itemVisionImpairmentReduction = bonuses.visionImpairmentReduction
-    end
-    -- Store hearing impairment reduction so we can re-apply it if it gets reset
-    if bonuses.hearingImpairmentReduction then
-        modData.itemHearingImpairmentReduction = bonuses.hearingImpairmentReduction
-    end
-    
-    -- Special handling for HandWeapon items
-    if instanceof(item, "HandWeapon") then
-        -- Apply damage directly from Lua using setMinDamage/setMaxDamage
-        -- Weight is handled by Java patch if available, otherwise skipped
-        if bonuses.damageMultiplier and item.getMinDamage and item.getMaxDamage and item.setMinDamage and item.setMaxDamage then
-            local originalMinDamage = item:getMinDamage()
-            local originalMaxDamage = item:getMaxDamage()
-            if originalMinDamage and originalMaxDamage then
-                item:setMinDamage(originalMinDamage * bonuses.damageMultiplier)
-                item:setMaxDamage(originalMaxDamage * bonuses.damageMultiplier)
-                print("ZItemTiers: Applied damage multiplier " .. bonuses.damageMultiplier .. "x to HandWeapon: " .. tostring(item:getFullType()))
-            end
-        end
-        -- Weight is handled by Java patch if available, otherwise HandWeapon weight reduction is skipped
-        -- (getActualWeight() reads from script item and ignores customWeight)
-        return
-    end
-    
-    -- Apply encumbrance reduction (for InventoryContainer items - reduces weight of items inside)
-    if bonuses.encumbranceReduction then
-        if ZItemTiers.ApplyEncumbranceReduction then
-            ZItemTiers.ApplyEncumbranceReduction(item, bonuses.encumbranceReduction)
-        end
-    end
-    
-    -- Apply weight reduction (applies to item's own weight, for ALL items except HandWeapon)
-    -- Containers get both weight reduction (own weight) and encumbrance reduction (items inside)
-    if bonuses.weightReduction then
-        if ZItemTiers.ApplyWeightReduction then
-            ZItemTiers.ApplyWeightReduction(item, bonuses.weightReduction)
-        end
-    end
-    
-    -- Check if item is HandWeapon (needed for damage multiplier check later)
-    local isHandWeapon = instanceof(item, "HandWeapon")
-    
-    -- Apply run speed modifier to ALL Clothing items that have a run speed modifier (not just shoes)
-    if bonuses.runSpeedModifier then
-        if ZItemTiers.ApplyRunSpeedModifier then
-            ZItemTiers.ApplyRunSpeedModifier(item, bonuses.runSpeedModifier)
-        end
-    end
-    
-    -- Apply bite and scratch defense bonuses (for Clothing items that already have defense)
-    if bonuses.biteDefenseBonus then
-        if ZItemTiers.ApplyBiteDefenseBonus then
-            ZItemTiers.ApplyBiteDefenseBonus(item, bonuses.biteDefenseBonus)
-        end
-    end
-    
-    if bonuses.scratchDefenseBonus then
-        if ZItemTiers.ApplyScratchDefenseBonus then
-            ZItemTiers.ApplyScratchDefenseBonus(item, bonuses.scratchDefenseBonus)
-        end
-    end
-    
-    -- Apply capacity bonus (for InventoryContainer items)
-    if bonuses.capacityBonus then
-        if ZItemTiers.ApplyCapacityBonus then
-            ZItemTiers.ApplyCapacityBonus(item, bonuses.capacityBonus)
-        end
-    end
-    
-    -- Apply max encumbrance bonus (for InventoryContainer items)
-    if bonuses.maxEncumbranceBonus then
-        if ZItemTiers.ApplyMaxEncumbranceBonus then
-            ZItemTiers.ApplyMaxEncumbranceBonus(item, bonuses.maxEncumbranceBonus, modData)
-        end
-    end
-    
-    -- Apply drainable capacity bonus (for Drainable items - liquid containers)
-    if bonuses.drainableCapacityBonus then
-        if ZItemTiers.ApplyDrainableCapacityBonus then
-            ZItemTiers.ApplyDrainableCapacityBonus(item, bonuses.drainableCapacityBonus, modData)
-        end
-    end
-    
-    -- Apply vision impairment reduction (for Clothing items with vision impairment)
-    if bonuses.visionImpairmentReduction then
-        if ZItemTiers.ApplyVisionImpairmentReduction then
-            ZItemTiers.ApplyVisionImpairmentReduction(item, bonuses.visionImpairmentReduction, modData)
-        end
-    end
-    
-    -- Apply hearing impairment reduction (for Clothing items with hearing impairment)
-    if bonuses.hearingImpairmentReduction then
-        if ZItemTiers.ApplyHearingImpairmentReduction then
-            ZItemTiers.ApplyHearingImpairmentReduction(item, bonuses.hearingImpairmentReduction, modData)
-        end
-    end
-    
-    -- Apply damage multiplier (for HandWeapon items - stored in modData, applied via Java patch)
-    if bonuses.damageMultiplier and isHandWeapon then
-        if ZItemTiers.ApplyDamageMultiplier then
-            ZItemTiers.ApplyDamageMultiplier(item, bonuses.damageMultiplier, modData)
-        end
-    end
-    
-    -- Apply mood bonus (for Literature items - increases boredom/unhappiness/stress reduction)
-    if bonuses.moodBonus then
-        if ZItemTiers.ApplyMoodBonus then
-            ZItemTiers.ApplyMoodBonus(item, bonuses.moodBonus)
-        end
-    end
-    
-    -- Store reading speed bonus in modData for ISReadABook hook (only for books, not VHS tapes)
-    if bonuses.readingSpeedBonus and instanceof(item, "Literature") then
-            -- Check if it's a VHS tape (exclude VHS from reading speed bonus)
-            local isVHS = false
-            local itemType = item:getType()
-            if itemType then
-                -- VHS tapes have "VHS" in their type
-                if string.find(itemType, "VHS") then
-                    isVHS = true
+
+    local zit = ZItemTiers.GetOrCreateZIT(item)
+    local itemScriptTbl = ZItemTiers.ParseItemScript(item)
+    for key, bonusFunc in pairs(ZItemTiers.Bonuses) do
+        local baseValue = itemScriptTbl[key:lower()]
+        if baseValue then
+            local setter = "set" .. key
+            if not item[setter] then
+                local alias = SETTER_ALIASES[key]
+                if alias then
+                    setter = "set" .. alias
                 end
             end
-            
-            -- Only apply reading speed bonus to books, not VHS tapes
-            if not isVHS and modData then
-                modData.itemReadingSpeedBonus = bonuses.readingSpeedBonus
-            end
-    end
-    
-    -- Store VHS skill XP bonus in modData (only for VHS tapes) -- commented out; VHS blacklisted for now
-    --[[
-    if bonuses.vhsSkillXpBonus then
-        local isVHS = false
-        local itemType = item:getType()
-        if itemType and string.find(itemType, "VHS") then
-            isVHS = true
-        end
-        if isVHS and modData then
-            print("ZItemTiers: [VHS] Applying skill XP bonus to: " .. itemType .. ", tier: " .. tier .. ", bonus: " .. tostring(bonuses.vhsSkillXpBonus))
-            modData.itemVhsSkillXpBonus = bonuses.vhsSkillXpBonus
-        end
-    end
-    ]]
-
-    -- Apply battery consumption reduction (for ElectricLight/Torch flashlights)
-    if bonuses.batteryConsumptionReduction then
-        if ZItemTiers.ApplyBatteryConsumptionReduction then
-            ZItemTiers.ApplyBatteryConsumptionReduction(item, bonuses.batteryConsumptionReduction, modData)
-        end
-    end
-    
-    -- Apply hunger reduction bonus (for Food items that reduce hunger)
-    if instanceof(item, "Food") then
-        local baseHunger = item.getBaseHunger and item:getBaseHunger() or nil
-        local currentHungChange = item.getHungChange and item:getHungChange() or nil
-        local scriptItem = item.getScriptItem and item:getScriptItem() or nil
-
-        local originalHungChange = nil
-        if scriptItem then
-            if scriptItem.HungerChange then
-                originalHungChange = scriptItem.HungerChange / 100.0
-            elseif scriptItem.hungerChange then
-                originalHungChange = scriptItem.hungerChange / 100.0
-            end
-        end
-        if not originalHungChange then
-            if baseHunger and baseHunger ~= 0.0 then
-                originalHungChange = baseHunger
-            elseif currentHungChange then
-                originalHungChange = currentHungChange
-            end
-        end
-
-        if originalHungChange and originalHungChange < 0.0 and scriptItem then
-            local tierIndex = tierData.index
-            local multiplier = 1.0 + (tierIndex - 1) * 0.2
-
-            if modData then
-                modData.itemHungerChangeOriginal = originalHungChange
-            end
-
-            local expectedModified = originalHungChange * multiplier
-
-            local needsUpdate = true
-            if modData and modData.itemHungerReductionMultiplier and currentHungChange and math.abs(currentHungChange - expectedModified) < 0.001 then
-                needsUpdate = false
-            end
-
-            if needsUpdate and item.setHungChange and item.setBaseHunger then
-                item:setHungChange(expectedModified)
-                item:setBaseHunger(expectedModified)
-                if modData then
-                    modData.itemHungerReductionMultiplier = multiplier
+            if item[setter] then
+                local modifiedValue = bonusFunc(baseValue, t0)
+                if modifiedValue and modifiedValue ~= baseValue then
+--                    logger:debug("    %-25s %8.3f -> %8.3f via %s", key, baseValue, modifiedValue, setter)
+                    item[setter](item, modifiedValue)
+--                    local getter = "get" .. key
+--                    if item[getter] then
+--                        logger:debug("    Verified %s = %.3f via %s", key, item[getter](item), getter)
+--                    end
+                else
+--                    logger:debug("    %-25s %8.3f -> no change", key, baseValue)
                 end
-                local verifyHungChange = item.getHungChange and item:getHungChange() or nil
-                local verifyBaseHunger = item.getBaseHunger and item:getBaseHunger() or nil
-                print("ZItemTiers: Applied hunger reduction multiplier " .. multiplier .. "x to Food: " .. tostring(item:getFullType()) .. " (base: " .. tostring(originalHungChange) .. ", current: " .. tostring(currentHungChange) .. ", new: " .. tostring(expectedModified) .. ", verify: " .. tostring(verifyHungChange) .. ", verifyBase: " .. tostring(verifyBaseHunger) .. ")")
+            else
+                logger:warn("    %-25s %8.3f -> no setter!", key, baseValue)
             end
         end
     end
-    
-    -- Mark bonuses as applied to prevent multiple applications
-    -- Always update to current session ID (not just when nil) so session-based caching works after save/load
-    if modData then
-        modData._bonusesApplied = ZItemTiers._bonusesAppliedSessionId
-    end
-    
-    -- Future bonuses can be added here following the same pattern
 end
 
 -- Get the 1-based index of the tier for an item, 1 = Common, 2 = Uncommon, ...
@@ -551,24 +387,27 @@ end
 function ZItemTiers.GetItemTierIndex(item)
     if not item then return ZItemTiers.CommonIdx end
     
-    local modData = item:getModData()
-    if not modData or not modData.itemTier then
+
+    local zit = ZItemTiers.GetOrCreateZIT(item)
+    if not zit.itemTier then
         return ZItemTiers.CommonIdx
     end
 
-    local tier = ZItemTiers.Tiers[modData.itemTier]
+    local tier = ZItemTiers.Tiers[zit.itemTier]
     if not tier then return ZItemTiers.CommonIdx end
 
-    local result = tier.index
-    if type(result) ~= "number" then return ZItemTiers.CommonIdx end
-
-    return result
+    return tier.index
 end
 
 -- Get the 0-based index of the tier for an item, 0 = Common, 1 = Uncommon, ...
 function ZItemTiers.GetItemTierIndex0(item)
     local idx1 = ZItemTiers.GetItemTierIndex(item)
     return idx1 - 1
+end
+
+function ZItemTiers.SetItemTier(item, tierName)
+    local zit = ZItemTiers.GetOrCreateZIT(item)
+    zit.itemTier = tierName
 end
 
 -- Get tier key for an item (returns "Common" if no tier assigned or item is nil)

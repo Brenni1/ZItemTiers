@@ -7,12 +7,8 @@ require "ZItemTiers/core"
 local function hasTier(item)
     if not item then return false end
     
-    local modData = item:getModData()
-    if modData and modData.itemTier then
-        return true
-    end
-    
-    return false
+    local zit = ZItemTiers.GetOrCreateZIT(item)
+    return zit.itemTier ~= nil and zit.itemTier ~= "Common"
 end
 
 -- Helper function to add tier information to a tooltip layout
@@ -110,7 +106,6 @@ end
 
 -- Load reading speed hook (shared, but ensure it's loaded on client)
 require "ZItemTiers/reading_speed"
-require "ZItemTiers/vhs_skill_xp"
 
 -- Load integration modules
 require "ZItemTiers/integrations/starlit"
@@ -118,8 +113,6 @@ require "ZItemTiers/integrations/betterclothinginfo"
 require "ZItemTiers/integrations/cleanui"
 require "ZItemTiers/integrations/contextmenu"
 
--- Check if BetterClothingInfo integration was successful
--- If not, fall back to ISToolTipInv:render hook
 if not ZItemTiers.BetterClothingInfoActive then
     -- BetterClothingInfo is not active - use ISToolTipInv:render hook
     zbHook({

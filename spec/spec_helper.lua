@@ -45,6 +45,6 @@ end
 
 -- Apply a tier to an item and return it
 function apply_tier(item, tier)
-    ZItemTiers.ApplyTierBonuses(item, tier)
+    ZItemTiers.ApplyBonuses(item, tier)
     return item
 end
