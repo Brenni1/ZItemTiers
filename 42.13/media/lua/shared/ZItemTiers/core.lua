@@ -149,7 +149,7 @@ ZItemTiers.TierBonuses = {
 
 -- Roll a random tier based on tier probabilities
 function ZItemTiers.RollTier()
-    local roll = ZombRand(10000) / 10000.0  -- Random 0.0 to 1.0
+    local roll = ZombRandFloat(0.0, 1.0)
     local cumulative = 0
     
     for i = 1, #ZItemTiers.TierProbabilities do

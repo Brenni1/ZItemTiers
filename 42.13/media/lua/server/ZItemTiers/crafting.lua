@@ -133,7 +133,7 @@ function ZItemTiers.CalculateCraftingTier(ingredientItems, character, recipe)
     -- Apply skill level modifiers
     if skillLevel == 0 then
         -- Skill level 0: 50% chance to be 1 tier lower
-        local roll = ZombRand(10000) / 10000.0  -- Random 0.0 to 1.0
+        local roll = ZombRandFloat(0.0, 1.0)
         if roll < 0.5 then
             -- Reduce by 1 tier (but not below Common/1)
             local oldIndex = targetIndex
@@ -146,7 +146,7 @@ function ZItemTiers.CalculateCraftingTier(ingredientItems, character, recipe)
         -- Skill level > 1: Small chance to be 1 tier higher
         -- Chance = 5% per level above 1 (so level 2 = 5%, level 3 = 10%, etc.)
         local upgradeChance = (skillLevel - 1) * 0.05
-        local roll = ZombRand(10000) / 10000.0  -- Random 0.0 to 1.0
+        local roll = ZombRandFloat(0.0, 1.0)
         
         if roll < upgradeChance then
             -- Upgrade by 1 tier (up to Legendary/5)
