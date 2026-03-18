@@ -8,5 +8,5 @@ loadModAfter=\CleanUI
 poster=poster.png
 icon=Item_Plunger
 
-javaJarFile=media/java/client/build/libs/client.jar
+javaJarFile=media/java/shared/ZItemTiers.jar
 javaPkgName=me.zed_0xff.itemtiers
