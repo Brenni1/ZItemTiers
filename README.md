@@ -43,20 +43,17 @@ Crafted output tier is derived from **ingredient tiers** (Factorio-style):
 - **Game version:** 42.x (42.13 media included).
 - **CleanUI:** Load after CleanUI (`loadModAfter=CleanUI` in mod.info).
 - **ZombieBuddy:** Optional. [ZombieBuddy](https://github.com/zed-0xff/ZombieBuddy) enables Java-based bonuses (e.g. weapon weight); without it, the mod runs Lua-only.
-- **Starlit Library:** Optional. If installed, tooltips show detailed bonus breakdowns.
 
 ## Integrations
 
 - **Better Clothing Info** – bonus display in clothing UI
 - **CleanUI** – load order
 - **Context Menu** – tier in context menus
-- **Starlit** – detailed tooltip bonuses
 
 ## Installation
 
 1. Subscribe (Steam Workshop) or drop the mod folder into `Steam/steamapps/common/Project Zomboid/mods/`.
 2. Enable **ZItemTiers** in the main menu Mods screen.
-3. (Optional) Install Starlit Library for rich tooltips; build/include the Java JAR for full weapon weight support.
 
 ## License
 

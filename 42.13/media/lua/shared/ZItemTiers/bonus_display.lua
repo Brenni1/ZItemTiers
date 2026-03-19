@@ -1,34 +1,9 @@
--- Bonus display logic for tooltips
--- Extracted from core.lua to keep it DRY and maintainable
-
 ZItemTiers = ZItemTiers or {}
 
 -- Get bonuses for an item (for display in tooltips)
 function ZItemTiers.GetItemBonuses(item)
-    return {}
---    if not item then return {} end
---    
---    local tier = ZItemTiers.GetItemTierKey(item)
---    local bonuses = ZItemTiers.TierBonuses[tier]
---    if not bonuses then return {} end
---    
---    -- Convert to list format for display
---    local bonusList = {}
---    
---    -- Add each bonus type to the list
---    ZItemTiers.AddWeightBonuses(bonusList, item, bonuses)
---    ZItemTiers.AddDamageBonus(bonusList, item, bonuses)
---    ZItemTiers.AddRunSpeedBonus(bonusList, item, bonuses)
---    ZItemTiers.AddDefenseBonuses(bonusList, item, bonuses)
---    ZItemTiers.AddContainerBonuses(bonusList, item, bonuses)
---    ZItemTiers.AddDrainableBonus(bonusList, item, bonuses)
---    ZItemTiers.AddVisionImpairmentBonus(bonusList, item, bonuses)
---    ZItemTiers.AddHearingImpairmentBonus(bonusList, item, bonuses)
---    ZItemTiers.AddMoodBonus(bonusList, item, bonuses)
---    ZItemTiers.AddReadingSpeedBonus(bonusList, item, bonuses)
---    -- ZItemTiers.AddVhsSkillXpBonus(bonusList, item, bonuses)  -- VHS bonuses commented out; VHS blacklisted for now
---
---    return bonusList
+    local zit = ZItemTiers.GetZIT(item)
+    return zit and zit.bonuses or {}
 end
 
 -- Add weight-related bonuses (weight reduction and encumbrance reduction)

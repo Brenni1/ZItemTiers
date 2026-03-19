@@ -22,7 +22,6 @@ Crafted output tier is based on [b]ingredient tiers[/b] (Factorio-style): output
 [h2]Compatible mods (optional)[/h2]
 [list]
 [*][url=https://steamcommunity.com/sharedfiles/filedetails/?id=3437629766][b]CleanUI[/b][/url] — load ZItemTiers after this.
-[*][url=https://steamcommunity.com/sharedfiles/filedetails/?id=3378285185][b]Starlit Library[/b][/url] — detailed tier bonus tooltips.
 [*][url=https://steamcommunity.com/sharedfiles/filedetails/?id=3604080281][b]Better Clothing Info[/b][/url] — shows tier bonuses in clothing comparison UI.
 [/list]
 

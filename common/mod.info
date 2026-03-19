@@ -3,6 +3,7 @@ id=ZItemTiers
 author=Zed
 url=https://github.com/zed-0xff/ZItemTiers
 description=Adds a probability-based item tier system (Common, Uncommon, Rare, Epic, Legendary). Any item can spawn with any tier based on global probabilities. Higher tier items have weight reduction and damage bonuses.
+
 loadModAfter=\CleanUI
 
 poster=poster.png

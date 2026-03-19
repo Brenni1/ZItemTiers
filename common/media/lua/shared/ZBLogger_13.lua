@@ -1,4 +1,4 @@
-local version = 1.2
+local version = 1.3
 if type(ZBLogger_VERSION) == "number" and ZBLogger_VERSION >= version then return end
 
 print("ZBLogger v" .. tostring(version) .. " init")
@@ -31,36 +31,42 @@ local function try_serialize(obj)
     return serialized
 end
 
-function ZBLogger:print(level, ...)
+function ZBLogger:print(level, fmt, ...)
     if self.level > level then return end
 
     local prefix = prefix_tbl[level] or prefix_tbl[ZBLogger.WARN]
     if self.id then
         prefix = prefix .. "[" .. self.id .. "] "
     end
+
+    -- add syntax sugar: "%s" prints table contents / function names / boolean values / etc
     local args = { ... }
-    if #args > 1 then
-        -- syntax sugar: "%s" prints table contents / function names / boolean values / etc
-        for i = 2, #args do
-            local arg_type = type(args[i])
-            if arg_type == "number" or arg_type == "string" then
-                -- do nothing
-            elseif arg_type == "function" and ZombieBuddy and ZombieBuddy.getCallableInfo then
-                local cinfo = ZombieBuddy.getCallableInfo(args[i])
-                if cinfo and cinfo.name then
-                    args[i] = "function " .. tostring(cinfo.name) .. "()"
-                else
-                    args[i] = try_serialize(args[i])
-                end
-            elseif instanceof(args[i], "IsoGridSquare") then
-                local sq = args[i]
-                args[i] = string.format("IsoGridSquare(%d, %d, %d)", sq:getX(), sq:getY(), sq:getZ())
+    for i = 1, select('#', ...) do -- select() handles nils in varargs
+        local arg = select(i, ...)
+        local arg_type = type(arg)
+        if arg_type == "number" or arg_type == "string" then
+            -- do nothing
+        elseif arg_type == "function" and ZombieBuddy and ZombieBuddy.getCallableInfo then
+            local cinfo = ZombieBuddy.getCallableInfo(arg)
+            if cinfo and cinfo.name then
+                args[i] = "function " .. tostring(cinfo.name) .. "()"
             else
-                args[i] = try_serialize(args[i])
+                args[i] = try_serialize(arg)
             end
+        elseif instanceof(arg, "IsoGridSquare") then
+            local sq = arg
+            args[i] = string.format("IsoGridSquare(%d, %d, %d)", sq:getX(), sq:getY(), sq:getZ())
+        else
+            args[i] = try_serialize(arg)
         end
     end
-    print(prefix .. string.format(unpack(args)))
+
+    local success = pcall(function()
+        print(prefix .. string.format(fmt, unpack(args)))
+    end)
+    if not success then
+        print("prefix: ", prefix, "fmt:", fmt, "args: ", serialize(args))
+    end
 end
 
 function ZBLogger:debug(...) self:print(ZBLogger.DEBUG, ...) end
