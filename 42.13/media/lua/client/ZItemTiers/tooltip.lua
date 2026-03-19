@@ -48,20 +48,20 @@ function ZItemTiers.addTierToLayout(item, layout)
 end
 
 -- Function to add tier information to a tooltip layout
-function ZItemTiers.AddTierToTooltip(item, tooltipUI, layout)
-    -- If layout is nil, try to get it from tooltipUI or create a new one
-    if not layout and tooltipUI then
-        if tooltipUI.beginLayout then
-            layout = tooltipUI:beginLayout()
-            -- layout:setMinLabelWidth(80)
-        end
-    end
-    
-    -- Can't add tier without a layout
-    if not layout then return end
-    
-    ZItemTiers.addTierToLayout(item, layout)
-end
+--function ZItemTiers.AddTierToTooltip(item, tooltipUI, layout)
+--    -- If layout is nil, try to get it from tooltipUI or create a new one
+--    if not layout and tooltipUI then
+--        if tooltipUI.beginLayout then
+--            layout = tooltipUI:beginLayout()
+--            -- layout:setMinLabelWidth(80)
+--        end
+--    end
+--    
+--    -- Can't add tier without a layout
+--    if not layout then return end
+--    
+--    ZItemTiers.addTierToLayout(item, layout)
+--end
 
 ---- Load reading speed hook (shared, but ensure it's loaded on client)
 --require "ZItemTiers/reading_speed"
@@ -73,9 +73,6 @@ end
 --if ZItemTiers.BetterClothingInfoActive then return end
 -- BetterClothingInfo is not active - use ISToolTipInv:render hook
 
-local _addW = 0
-local _addH = 0
-
 local function table_size(t)
     local count = 0
     if t then
@@ -84,35 +81,49 @@ local function table_size(t)
     return count
 end
 
+local function createTierLayout(tooltipObj, item)
+    local layout = tooltipObj:beginLayout()
+    layout:setMinLabelWidth(110)
+    ZItemTiers.addTierToLayout(item, layout)
+    return layout
+end
+
 zbHook({
     ISToolTipInv = {
-        new = function(orig, self, ...)
-            local o = orig(self, ...)
-            zbHook({
-                [o.tooltip] = {
-                    getWidth  = function(orig, self) return orig(self) + _addW end,
-                    getHeight = function(orig, self) return orig(self) + _addH + 20 end,
-                }})
-            _G.gToolTipInv = o
-            return o
-        end,
-
         render = function(orig, self)
-            if self.item then
-                local bonuses = ZItemTiers.GetItemBonuses(self.item)
-                _addW = 0; _addH = (table_size(bonuses) + 1) * self.tooltip:getLineSpacing()
-            end
+            -- local padX = Math.max(TextManager.instance:MeasureStringX(self.tooltip:getFont(), "W"), 8) -- as in ObjectTooltip.java
 
             orig(self)
+            if not self.item then return end
 
-            _addW = 0; _addH = 0
-            local layout = self.tooltip:beginLayout()
-            layout:setMinLabelWidth(110)
-            ZItemTiers.addTierToLayout(self.item, layout)
+            local w0 = self:getWidth()
+            local h0 = self:getHeight()
+
+            local bonuses = ZItemTiers.GetItemBonuses(self.item)
+            local h1 = (table_size(bonuses) + 1) * self.tooltip:getLineSpacing()
+
+            self.tooltip:setMeasureOnly(true)
+            local layout = createTierLayout(self.tooltip, self.item)
             local startX = ZItemTiers.pad
-            local startY = self.tooltip:getHeight() - ZItemTiers.pad
+            local startY = h0
+            layout:render(startX, startY, self.tooltip)
+            self.tooltip:setMeasureOnly(false)
+
+            local w1 = math.max(w0, self.tooltip:getWidth())
+            -- local h1 = self.tooltip:getHeight() -- returns incorrect hieght for some reason
+
+            self:drawRect      (0, h0, w1, h1, self.backgroundColor.a, self.backgroundColor.r, self.backgroundColor.g, self.backgroundColor.b)
+            self:drawRectBorder(0, h0, w1, h1, self.borderColor.a,     self.borderColor.r,     self.borderColor.g,     self.borderColor.b)
+
             layout:render(startX, startY, self.tooltip)
             self.tooltip:endLayout(layout)
+
+            if self:getWidth() < w1 then
+                self:setWidth(w1)
+            end
+            if self:getHeight() < h0 + h1 then
+                self:setHeight(h0 + h1)
+            end
         end,
     }
 })
