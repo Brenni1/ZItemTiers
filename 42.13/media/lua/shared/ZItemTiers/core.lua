@@ -120,10 +120,11 @@ local _ = nil
 ZItemTiers.Bonuses = {
     CombatSpeedModifier       = function(base, t0) return clamp(base + 0.01 * t0, _, base < 1 and 1) end,        -- 0.90 .. 0.99
     -- needs java patch, see IsoGameCharacter.updateDiscomfortModifiers() as well
-    DiscomfortModifier        = function(base, t0) return clamp(base - 0.05 * t0, 0, _) end,                     -- 0.02 .. 0.75
+    DiscomfortModifier        = function(base, t0) return clamp(base - 0.05 * t0, 0, _) end,                     -- 0.02 .. 0.75 JAVA
     NeckProtectionModifier    = function(base, t0) return clamp(base + 0.05 * t0, _, 1) end,                     -- 0.30 .. 0.50
-    RunSpeedModifier          = function(base, t0) return clamp(base + 0.05 * t0, _, base < 1 and 1) end,        -- 0.70 .. 1.10
-    VisionModifier            = function(base, t0) return clamp(base + 0.05 * t0, _, 1) end,                     -- 0.25 .. 0.75
+    RunSpeedModifier          = function(base, t0) return clamp(base + 0.05 * t0, _, base < 1 and 1) end,        -- 0.70 .. 1.10 JAVA for containers, LUA for Clothing
+    HearingModifier           = function(base, t0) return clamp(base + 0.05 * t0, _, 1) end,                     -- 0.50 .. 0.85 JAVA
+    VisionModifier            = function(base, t0) return clamp(base + 0.05 * t0, _, 1) end,                     -- 0.25 .. 0.75 JAVA
                                                                                                                  
     Insulation                = function(base, t0) return clamp(base + 0.05 * t0, _, 1) end,                     -- 0.05 .. 1.00
     WaterResistance           = function(base, t0) return clamp(base + 0.05 * t0, _, 1) end,                     -- 0.20 .. 1.00
@@ -134,9 +135,9 @@ ZItemTiers.Bonuses = {
     CorpseSicknessDefense     = function(base, t0) return clamp(base + 5 * t0, _, 100) end,                      --   25
     ScratchDefense            = function(base, t0) return clamp(base + 5 * t0, _, 100) end,                      --    5 .. 100
                                                                                                                  
-    -- TODO: FluidContainer.Capacity   =  0.10 .. 600   = base * (1 + 0.25 * t0)                                 
+    FluidContainer_Capacity   = function(base, t0) return base * (1 + 0.250 * t0) end,                           -- 0.10 .. 600
     Capacity                  = function(base, t0) return base * (1 + 0.125 * t0) end,                           --    1 .. 35
-    MaxItemSize               = function(base, t0) return base * (1 + 0.25 * t0) end,                            -- 0.20 .. 2.00
+    MaxItemSize               = function(base, t0) return base * (1 + 0.250 * t0) end,                           -- 0.20 .. 2.00
     Weight                    = function(base, t0) return clamp(base * (1 - 0.05 * t0), 0, _) end,               -- 0.001 . 50
     WeightReduction           = function(base, t0) return clamp(base + 5 * t0, 0, max(base, 90)) end,            --   30 .. 90
 
@@ -145,8 +146,7 @@ ZItemTiers.Bonuses = {
     RecoilDelay               = function(base, t0) return clamp(base - t0, 0, _) end,                            -- 11 .. 33
     ReloadTime                = function(base, t0) return clamp(base - 2 * t0, 0, _) end,                        -- 25 .. 30
                                                                                                                 
-    -- ConditionLowerChance
-    ConditionLowerChanceOneIn = function(base, t0) return base + t0 end,                                         --  6 .. 8
+    ConditionLowerChanceOneIn = function(base, t0) return base + t0 end,                                         --  6 .. 8     also partially JAVA?
     ConditionMax              = function(base, t0) return base + t0 end,                                         -- 10 .. 12
                                                                                                                 
     ChanceToFall              = function(base, t0) return clamp(base - 5 * t0, 0, _) end,                        --  0 .. 80
@@ -162,7 +162,6 @@ ZItemTiers.Bonuses = {
                                                                                                                 
     TreeDamage                = function(base, t0) return base > 0 and base * (1 + 0.05 * t0) end,               --  1    .. 55
     BaseSpeed                 = function(base, t0) return base - 0.05 * t0 end,                                  --  0.7  ..  1.4
-    -- CriticalDamageMultiplier
     CritDmgMultiplier         = function(base, t0) return base + 0.5 * t0 end,                                   --  1    .. 12
     MaxDamage                 = function(base, t0) return affine_scale(base, t0, _) end,                         --  0.1  ..  8
     MaxRange                  = function(base, t0) return affine_scale(base, t0, _) end,                         --  0.6  .. 40
@@ -197,6 +196,7 @@ local SETTER_ALIASES = {
     CritDmgMultiplier         = "CriticalDamageMultiplier",
     HungerChange              = "HungChange",
     MaxRangeModifier          = "MaxRange",
+    RecoilDelayModifier       = "RecoilDelay",
 }
 
 function ZItemTiers.GetOrCreateZIT(item)
@@ -220,6 +220,17 @@ function ZItemTiers.GetOrCreateZIT(item)
     end
 
     return zit
+end
+
+function ZItemTiers.GetZIT(item)
+    if not item or not item.getModData then return nil end
+    
+    local modData = item:getModData()
+    if not modData then return nil end
+
+    if type(modData.ZIT) ~= "table" then return nil end
+
+    return modData.ZIT
 end
 
 -- Roll a random tier based on tier probabilities
@@ -349,6 +360,8 @@ function ZItemTiers.ApplyBonuses(item, forceTier)
     end
 
     local zit = ZItemTiers.GetOrCreateZIT(item)
+    zit.bonuses = zit.bonuses or {}
+
     local itemScriptTbl = ZItemTiers.ParseItemScript(item)
     for key, bonusFunc in pairs(ZItemTiers.Bonuses) do
         local baseValue = itemScriptTbl[key:lower()]
@@ -360,20 +373,24 @@ function ZItemTiers.ApplyBonuses(item, forceTier)
                     setter = "set" .. alias
                 end
             end
-            if item[setter] then
+
+            local target = item
+            if not target[setter] and key == "FluidContainer_Capacity" and item.getFluidContainer then
+                key = "Capacity"
+                target = item:getFluidContainer()
+            end
+
+            if target and target[setter] then
                 local modifiedValue = bonusFunc(baseValue, t0)
                 if modifiedValue and modifiedValue ~= baseValue then
---                    logger:debug("    %-25s %8.3f -> %8.3f via %s", key, baseValue, modifiedValue, setter)
-                    item[setter](item, modifiedValue)
---                    local getter = "get" .. key
---                    if item[getter] then
---                        logger:debug("    Verified %s = %.3f via %s", key, item[getter](item), getter)
---                    end
-                else
---                    logger:debug("    %-25s %8.3f -> no change", key, baseValue)
+                    target[setter](target, modifiedValue)
+                    zit.bonuses[key] = {
+                        base     = baseValue,
+                        modified = modifiedValue,
+                    }
                 end
             else
-                logger:warn("    %-25s %8.3f -> no setter!", key, baseValue)
+                logger:warn("%s: no %s()", item, setter)
             end
         end
     end
@@ -416,16 +433,9 @@ end
 function ZItemTiers.GetItemTierKey(item)
     if not item then return "Common" end
     
-    local modData = item:getModData()
-    if not modData or not modData.itemTier then
-        return "Common"
-    end
-    
-    return modData.itemTier or "Common"
+    local zit = ZItemTiers.GetZIT(item)
+    return (zit and zit.itemTier) or "Common"
 end
-
--- Get bonuses for an item (for display purposes)
--- GetItemBonuses is now in bonus_display.lua module
 
 -- Get bonus display name
 function ZItemTiers.GetBonusDisplayName(bonusType)
