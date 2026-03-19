@@ -389,7 +389,7 @@ function ZItemTiers.ApplyBonuses(item, forceTier)
                         modified = modifiedValue,
                     }
                 end
-            else
+            elseif setter ~= "setCapacity" and item.getFluidContainer and item:getFluidContainer() then
                 logger:warn("%s: no %s()", item, setter)
             end
         end
