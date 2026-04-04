@@ -1,5 +1,5 @@
 -- Hook into refreshContainer to ungroup items with different tiers
-zbHook({
+zdk.hook({
     ISInventoryPane = {
         refreshContainer = function(orig, self, ...)
             orig(self, ...)

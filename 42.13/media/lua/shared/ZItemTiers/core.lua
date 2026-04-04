@@ -1,5 +1,5 @@
 ZItemTiers = ZItemTiers or {}
-ZItemTiers.logger = ZItemTiers.logger or ZBLogger.new("ZItemTiers", ZBLogger.DEBUG)
+ZItemTiers.logger = ZItemTiers.logger or zdk.Logger.new("ZItemTiers", zdk.Logger.DEBUG)
 local logger = ZItemTiers.logger
 
 -- Blacklist of items that should never have tier assigned
@@ -76,128 +76,6 @@ end
 function ZItemTiers.GetT0FromTierName(tierName)
     return ZItemTiers.Tiers[tierName].index - 1
 end
-
--- common  uncomm  rare    epic    legendary
--- 0.010   0.015   0.020   0.026   0.031
--- 0.230   0.241   0.252   0.262   0.273
--- 0.500   0.518   0.535   0.552   0.570
--- 0.800   0.825   0.850   0.875   0.900
--- 0.900   0.928   0.955   0.982   1.010
-local function affine_scale(base, t0, maxValue)
-    if base <= 0 or (maxValue and base >= maxValue) then return base end
-
-    local value = base * (1 + 0.025 * t0) + 0.005*t0
-    if maxValue and value > maxValue then
-        value = maxValue
-    end
-    return value
-end
-
-local function neg_affine_scale(base, t0, minValue)
-    if base <= 0 or (minValue and base <= minValue) then return base end
-
-    local value = base * (1 - 0.025 * t0) - 0.005*t0
-    if minValue then
-        if value < minValue then value = minValue end
-    else
-        if value < 0 then value = base end -- XXX maybe cap to last positive value?
-    end
-    return value
-end
-
-local function clamp(_value, _min, _max)
-    if not _min then _min = _value end
-    if not _max then _max = _value end
-    return math.min(math.max(_value, _min), _max)
-end
-
-local max = math.max
-
--- "_ in Lua is like a napkin at dinner: completely ordinary, but everyone silently agrees what it’s for." (c) ChatGPT
-local _ = nil
-
---                                                                                                        rg -iIo '\sBiteDefense\s*=.+' -g "*.txt" | sort | uniq -c | sort -n +3
-ZItemTiers.Bonuses = {
-    CombatSpeedModifier       = function(base, t0) return clamp(base + 0.01 * t0, _, base < 1 and 1) end,        -- 0.90 .. 0.99
-    -- needs java patch, see IsoGameCharacter.updateDiscomfortModifiers() as well
-    DiscomfortModifier        = function(base, t0) return clamp(base - 0.05 * t0, 0, _) end,                     -- 0.02 .. 0.75 JAVA
-    NeckProtectionModifier    = function(base, t0) return clamp(base + 0.05 * t0, _, 1) end,                     -- 0.30 .. 0.50
-    RunSpeedModifier          = function(base, t0) return clamp(base + 0.05 * t0, _, base < 1 and 1) end,        -- 0.70 .. 1.10 JAVA for containers, LUA for Clothing
-    HearingModifier           = function(base, t0) return clamp(base + 0.05 * t0, _, 1) end,                     -- 0.50 .. 0.85 JAVA
-    VisionModifier            = function(base, t0) return clamp(base + 0.05 * t0, _, 1) end,                     -- 0.25 .. 0.75 JAVA
-                                                                                                                 
-    Insulation                = function(base, t0) return clamp(base + 0.05 * t0, _, 1) end,                     -- 0.05 .. 1.00
-    WaterResistance           = function(base, t0) return clamp(base + 0.05 * t0, _, 1) end,                     -- 0.20 .. 1.00
-    Windresistance            = function(base, t0) return clamp(base + 0.05 * t0, _, 1) end,                     -- 0.10 .. 1.00
-                                                                                                                 
-    BiteDefense               = function(base, t0) return clamp(base + 5 * t0, _, 100) end,                      --    7 .. 100
-    BulletDefense             = function(base, t0) return clamp(base + 5 * t0, _, 100) end,                      --    5 .. 100
-    CorpseSicknessDefense     = function(base, t0) return clamp(base + 5 * t0, _, 100) end,                      --   25
-    ScratchDefense            = function(base, t0) return clamp(base + 5 * t0, _, 100) end,                      --    5 .. 100
-                                                                                                                 
-    FluidContainer_Capacity   = function(base, t0) return base * (1 + 0.250 * t0) end,                           -- 0.10 .. 600
-    Capacity                  = function(base, t0) return base * (1 + 0.125 * t0) end,                           --    1 .. 35
-    MaxItemSize               = function(base, t0) return base * (1 + 0.250 * t0) end,                           -- 0.20 .. 2.00
-    Weight                    = function(base, t0) return clamp(base * (1 - 0.05 * t0), 0, _) end,               -- 0.001 . 50
-    WeightReduction           = function(base, t0) return clamp(base + 5 * t0, 0, max(base, 90)) end,            --   30 .. 90
-
-    UseDelta                  = function(base, t0) return base < 1 and clamp(base * (1 - 0.125 * t0), 0, _) end, -- 0.00001 .. 1.0
-
-    RecoilDelay               = function(base, t0) return clamp(base - t0, 0, _) end,                            -- 11 .. 33
-    ReloadTime                = function(base, t0) return clamp(base - 2 * t0, 0, _) end,                        -- 25 .. 30
-                                                                                                                
-    ConditionLowerChanceOneIn = function(base, t0) return base + t0 end,                                         --  6 .. 8     also partially JAVA?
-    ConditionMax              = function(base, t0) return base + t0 end,                                         -- 10 .. 12
-                                                                                                                
-    ChanceToFall              = function(base, t0) return clamp(base - 5 * t0, 0, _) end,                        --  0 .. 80
-                                                                                                                
-    JamGunChance              = function(base, t0) return clamp(base - 0.25 * t0, 0, _) end,                     --  0 .. 2
-    CriticalChance            = function(base, t0) return base > 0 and clamp(base + 5 * t0, 0, 90) end,          -- 0,  5 .. 70
-    HitChance                 = function(base, t0) return base > 0 and clamp(base + 5 * t0, 0, 95) end,          -- 0, 45 .. 70
-                                                                                                                
-    AimingTimeModifier        = function(base, t0) return base ~= 0 and base - 0.5 * t0 end,                     -- -10  .. 20
-    MaxRangeModifier          = function(base, t0) return base ~= 0 and base + 0.2 * t0 end,                     -- -0.8 ..  7
-    RecoilDelayModifier       = function(base, t0) return base * (1 + 0.25 * t0) end,                            -- -2
-    WeightModifier            = function(base, t0) return base * (1 - 0.05 * t0) end,                            --  0  .. 0.8
-                                                                                                                
-    TreeDamage                = function(base, t0) return base > 0 and base * (1 + 0.05 * t0) end,               --  1    .. 55
-    BaseSpeed                 = function(base, t0) return base - 0.05 * t0 end,                                  --  0.7  ..  1.4
-    CritDmgMultiplier         = function(base, t0) return base + 0.5 * t0 end,                                   --  1    .. 12
-    MaxDamage                 = function(base, t0) return affine_scale(base, t0, _) end,                         --  0.1  ..  8
-    MaxRange                  = function(base, t0) return affine_scale(base, t0, _) end,                         --  0.6  .. 40
-    PushBackMod               = function(base, t0) return base > 0 and affine_scale(base, t0, 1.0) end,          --  0    ..  1
-    SwingTime                 = function(base, t0) return neg_affine_scale(base, t0, _) end,                     --  0.5  ..  4
-    MinimumSwingTime          = function(base, t0) return neg_affine_scale(base, t0, _) end,                     --  0.5  ..  4
-    WeaponLength              = function(base, t0) return affine_scale(base, t0, _) end,                         --  0.15 ..  0.7
-    StompPower                = function(base, t0) return base * (1 + 0.05 * t0) end,                            --  0.8  .. 2.5
-                                                                                                                
-    -- AlcoholedCottonBalls/AlcoholWipes                                                                        
-    AlcoholPower              = function(base, t0) return base * (1 + 0.125 * t0) end,                           -- 4
-    BandagePower              = function(base, t0) return base * (1 + 0.125 * t0) end,                           -- 0.5 .. 4
-
-    FatigueChange             = function(base, t0) return base ~= 0 and base - math.abs(base) * 0.25 * t0 end,   --  -50 ..  -10
-    StressChange              = function(base, t0) return base ~= 0 and base - math.abs(base) * 0.25 * t0 end,   --  -20 ..    1
-    BoredomChange             = function(base, t0) return base ~= 0 and base - math.abs(base) * 0.25 * t0 end,   --  -50 ..   20
-    -- HungChange
-    HungerChange              = function(base, t0) return base ~= 0 and base - math.abs(base) * 0.25 * t0 end,   --   -1 .. -160
-    ThirstChange              = function(base, t0) return base ~= 0 and base - math.abs(base) * 0.25 * t0 end,   -- -140 ..   60
-    UnhappyChange             = function(base, t0) return base ~= 0 and base - math.abs(base) * 0.25 * t0 end,   --  -50 ..  500
-                                                                                                                 
-    fluReduction              = function(base, t0) return base * (1 + 0.25 * t0) end,                            -- 5
-    painReduction             = function(base, t0) return base * (1 + 0.25 * t0) end,                            -- 7
-                                                                                                                 
-    DaysFresh                 = function(base, t0) return base > 0 and base * (1 + 0.25 * t0) end,               -- 0 .. 365
-    DaysTotallyRotten         = function(base, t0) return base > 0 and base * (1 + 0.25 * t0) end,               -- 0 .. 730
-}
-
-local SETTER_ALIASES = {
-    AimingTimeModifier        = "AimingTime",
-    ConditionLowerChanceOneIn = "ConditionLowerChance",
-    CritDmgMultiplier         = "CriticalDamageMultiplier",
-    HungerChange              = "HungChange",
-    MaxRangeModifier          = "MaxRange",
-    RecoilDelayModifier       = "RecoilDelay",
-}
 
 function ZItemTiers.GetOrCreateZIT(item)
     if not item or not item.getModData then return nil end
@@ -329,24 +207,25 @@ end
 --         "calories" => 720,
 --     "hungerchange" => -15
 --}
-function ZItemTiers.ParseItemScript(item)
-    local result = {}
-    local scriptItem = item:getScriptItem()
-    local lines = scriptItem:getScriptLines()
-    for i=0,lines:size()-1 do
-        local line = lines:get(i):gsub("[\t ,]", ""):lower()
-        local a = line:split("=")
-        if a and #a == 2 then
-            local num = tonumber(a[2])
-            if num then
-                result[a[1]] = num
-            end
+function ZItemTiers.ParseItemScript(scriptItem)
+    local all_fields = zdk.parse_item_script(scriptItem)
+    local numeric_only = {}
+    for k, v in pairs(all_fields) do
+        v = tonumber(v)
+        if v then
+            numeric_only[k] = v
         end
     end
-    return result
+    return numeric_only
 end
 
+local _negativeCategoryCache = {}
+
+ZItemTiers.negativeCategoryCache = _negativeCategoryCache -- for debug
+
 function ZItemTiers.ApplyBonuses(item, forceTier)
+    if ZItemTiers.IsItemBlacklisted(item) then return end
+
     if forceTier then
         ZItemTiers.SetItemTier(item, forceTier)
     end
@@ -360,40 +239,55 @@ function ZItemTiers.ApplyBonuses(item, forceTier)
     end
 
     local zit = ZItemTiers.GetOrCreateZIT(item)
+    local curTime = getGameTime():getCalender():getTimeInMillis()
+    if zit.ts and curTime - zit.ts < 600000 then
+        -- logger:debug("Bonuses already applied recently for %s, skipping", item)
+        return
+    end
+
+    zit.ts = curTime
     zit.bonuses = zit.bonuses or {}
 
-    local itemScriptTbl = ZItemTiers.ParseItemScript(item)
-    for key, bonusFunc in pairs(ZItemTiers.Bonuses) do
-        local baseValue = itemScriptTbl[key:lower()]
-        if baseValue then
-            local setter = "set" .. key
-            if not item[setter] then
-                local alias = SETTER_ALIASES[key]
-                if alias then
-                    setter = "set" .. alias
-                end
-            end
+    local scriptItem    = item:getScriptItem()
+    local itemScriptTbl = ZItemTiers.ParseItemScript(scriptItem)
+    local itemCategory  = item:getCategory() or "?"
 
+    _negativeCategoryCache[itemCategory] = _negativeCategoryCache[itemCategory] or {}
+    local nCatCache = _negativeCategoryCache[itemCategory]
+
+    for key, bonus in pairs(ZItemTiers.Bonuses) do
+        if not nCatCache[key] then
             local target = item
-            if not target[setter] and key == "FluidContainer_Capacity" and item.getFluidContainer then
-                key = "Capacity"
-                target = item:getFluidContainer()
+            local base   = itemScriptTbl[key:lower()] or (scriptItem[bonus.getter] and scriptItem[bonus.getter](scriptItem))
+
+            if bonus.component then -- e.g. FluidContainer
+                base = nil
+                target = item:getComponent(bonus.component)
+                if target then
+                    local compScript = scriptItem:getComponentScriptFor(bonus.component)
+                    base = compScript[bonus.getter] and compScript[bonus.getter](compScript)
+                end
             end
 
-            if target and target[setter] then
-                local modifiedValue = bonusFunc(baseValue, t0)
-                if modifiedValue and modifiedValue ~= baseValue then
-                    target[setter](target, modifiedValue)
-                    zit.bonuses[key] = {
-                        base     = baseValue,
-                        modified = modifiedValue,
-                    }
+            if base and base ~= 0 then
+                if target and target[bonus.setter] then
+                    local modified = bonus.func(base, t0)
+                    if modified and modified ~= base then
+                        target[bonus.setter](target, modified)
+                        zit.bonuses[key] = {
+                            base     = base,
+                            modified = modified,
+                        }
+                    end
+                else
+                    logger:warn("%s: no %s(), itemCategory=%s", item, bonus.setter, itemCategory)
+                    nCatCache[key] = true -- cache that this category doesn't have this bonus to avoid future warnings
                 end
-            elseif setter ~= "setCapacity" and item.getFluidContainer and item:getFluidContainer() then
-                logger:warn("%s: no %s()", item, setter)
             end
         end
     end
+
+    return true
 end
 
 -- Get the 1-based index of the tier for an item, 1 = Common, 2 = Uncommon, ...
@@ -456,4 +350,175 @@ function ZItemTiers.GetBonusDisplayName(bonusType)
         VhsSkillXpBonus = "Skill XP Bonus",
     }
     return displayNames[bonusType] or bonusType
+end
+
+-- Calculate output tier based on ingredient tiers (Factorio-style)
+-- Returns the calculated tier name
+-- Parameters:
+--   src:               ArrayList/table of ingredient items
+--   perk:   [optional] relevant Perk for skill level calculation (overrides recipe's)
+--   player: [optional] IsoGameCharacter performing the craft
+--   recipe: [optional] CraftRecipe being performed
+--   tools:  [optional] table of tools used (e.g. for sewing machine)
+-- Rules:
+-- 1. If all ingredients are Epic, output is at least Epic
+-- 2. If ingredients have different tiers, output tier is based on their ratio/probability
+-- 3. Output is always at least the minimum (highest tier) tier among ingredients
+-- 4. Skill level affects the result:
+--    - Level 0: 50% chance to be 1 tier lower
+--    - Level 1: Keep calculated tier (no change)
+--    - Level > 1: Small chance (5% per level above 1) to be 1 tier higher
+function ZItemTiers.CalculateCraftingTier(tbl)
+    local logger = logger:withPrefix("CalculateCraftingTier() ")
+
+    local src    = tbl.src
+    local perk   = tbl.perk
+    local player = tbl.player
+    local recipe = tbl.recipe
+    local tools  = tbl.tools  -- TODO: use
+
+    if type(src) ~= "table" and src.toArray then
+        src = src:toArray()
+    end
+    if type(src) ~= "table" then
+        logger:error("Invalid src parameter: expected ArrayList or table, got %s", type(src))
+        return ZItemTiers.RollTier()
+    end
+
+    if table.isempty(src) then
+        -- No ingredients, use normal spawn probability
+        return ZItemTiers.RollTier()
+    end
+
+    -- Get crafting skill level
+    local skillLevel = nil
+    if player then
+        skillLevel = (perk and player:getPerkLevel(perk)) or (recipe and recipe:getHighestRelevantSkillLevel(player))
+    end
+    logger:debug("detected skill level: %s", skillLevel)
+
+    -- Fallback: if recipe method failed, try to manually check common crafting skills
+    if not skillLevel or skillLevel == 0 then
+        -- No skill level, use normal spawn probability
+        return ZItemTiers.RollTier()
+    end
+    
+    -- Collect tiers from all ingredients
+    local tierCounts = {}
+    local totalIngredients = 0
+    
+    for _, ingredient in ipairs(src) do
+        if ingredient then
+            local tier = ZItemTiers.GetItemTierKey(ingredient)
+            if tier then
+                tierCounts[tier] = (tierCounts[tier] or 0) + 1
+                totalIngredients = totalIngredients + 1
+            end
+        end
+    end
+    
+    if totalIngredients == 0 then
+        -- No ingredients with tier, use normal spawn probability
+        return ZItemTiers.RollTier()
+    end
+    
+    -- Find the minimum tier index (highest tier) among all ingredients
+    -- This is the "floor" - output will be at least this tier
+    local minTierIndex = nil
+    for tierName, count in pairs(tierCounts) do
+        local tierData = ZItemTiers.Tiers[tierName]
+        if tierData then
+            if minTierIndex == nil or tierData.index > minTierIndex then
+                minTierIndex = tierData.index
+            end
+        end
+    end
+    
+    if not minTierIndex then
+        return "Common"
+    end
+    
+    -- Calculate weighted average of ingredient tiers based on count
+    local weightedSum = 0
+    for tierName, count in pairs(tierCounts) do
+        local tierData = ZItemTiers.Tiers[tierName]
+        if tierData then
+            weightedSum = weightedSum + (tierData.index * count)
+        end
+    end
+    local averageIndex = weightedSum / totalIngredients
+    
+    -- Round to nearest integer
+    local targetIndex = math.floor(averageIndex + 0.5)
+    
+    -- Ensure output is at least the minimum tier tier (Factorio rule: all Epic -> at least Epic)
+    targetIndex = math.max(minTierIndex, targetIndex)
+    
+    -- Debug: log calculation before skill modifiers
+    logger:debug("targetIndex=%d (skillLevel=%d)", targetIndex, skillLevel)
+    
+    -- Apply skill level modifiers
+    if skillLevel == 0 then
+        -- Skill level 0: 50% chance to be 1 tier lower
+        local roll = ZombRandFloat(0.0, 1.0)
+        if roll < 0.5 then
+            -- Reduce by 1 tier (but not below Common/1)
+            local oldIndex = targetIndex
+            targetIndex = math.max(1, targetIndex - 1)
+            logger:debug("skill level 0 reduced tier from %d to %d (roll=%.2f)", oldIndex, targetIndex, roll)
+        else
+            logger:debug("skill level 0 kept tier at %d (roll=%.2f)", targetIndex, roll)
+        end
+    elseif skillLevel > 1 then
+        -- Skill level > 1: Small chance to be 1 tier higher
+        -- Chance = 5% per level above 1 (so level 2 = 5%, level 3 = 10%, etc.)
+        local upgradeChance = (skillLevel - 1) * 0.05
+        local roll = ZombRandFloat(0.0, 1.0)
+        
+        if roll < upgradeChance then
+            -- Upgrade by 1 tier (up to Legendary/5)
+            local oldIndex = targetIndex
+            targetIndex = math.min(5, targetIndex + 1)
+            logger:debug("skill level %d upgraded tier from %d to %d (roll=%.2f, chance=%.3f)", skillLevel, oldIndex, targetIndex, roll, upgradeChance)
+        end
+    else
+        -- Skill level 1: No change (keep calculated tier)
+        logger:debug("skill level 1 kept tier at %d (no change)", targetIndex)
+    end
+    
+    -- Clamp to valid tier range (1-5)
+    targetIndex = math.max(1, math.min(5, targetIndex))
+    
+    -- Find tier name by index
+    for tierName, tierData in pairs(ZItemTiers.Tiers) do
+        if tierData.index == targetIndex then
+            return tierName
+        end
+    end
+    
+    -- Fallback: return the minimum tier
+    for tierName, tierData in pairs(ZItemTiers.Tiers) do
+        if tierData.index == minTierIndex then
+            return tierName
+        end
+    end
+    
+    return "Common"
+end
+
+-- capture instanceItem() calls while calling origFun() and apply crafting tier bonuses to crafted items based on src ingredients
+-- see CalculateCraftingTier() for tbl parameters description
+function ZItemTiers.AutoTierCraftedItems(tbl, origFun, ...)
+    return zdk.scoped_hook({
+        _G = {
+            instanceItem = function(orig, ...)
+                local item = orig(...)
+                local tier = ZItemTiers.CalculateCraftingTier(tbl)
+                if tier then
+                    ZItemTiers.ApplyBonuses(item, tier)
+                end
+                return item
+            end
+        }
+    }, origFun, ...)
 end

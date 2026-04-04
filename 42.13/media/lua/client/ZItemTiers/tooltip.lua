@@ -88,7 +88,7 @@ local function createTierLayout(tooltipObj, item)
     return layout
 end
 
-zbHook({
+zdk.hook({
     ISToolTipInv = {
         render = function(orig, self)
             -- local padX = Math.max(TextManager.instance:MeasureStringX(self.tooltip:getFont(), "W"), 8) -- as in ObjectTooltip.java

@@ -13,7 +13,7 @@
 ---- Check if CleanUI mod is active
 --if not CleanUI_getItemNameColor then return end
 --
---zbHook({
+--zdk.hook({
 --    _G = {
 --        CleanUI_getItemNameColor = function(orig, ...)
 --            -- Get the current item from context (set by isUnwanted hook)

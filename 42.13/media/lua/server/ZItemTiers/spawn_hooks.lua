@@ -139,9 +139,11 @@ end
 -- - Items are added/removed from containers
 -- - Items are picked up from ground (added to inventory)
 -- - Floor container is accessed (world items on the ground)
--- XXX: does not get called???
+-- XXX: gets called only with nil?
 local function onContainerUpdate(container)
-    logger:debug("onContainerUpdate(%s)", container)
+    if container then
+        logger:debug("onContainerUpdate(%s)", container)
+    end
 --    if not ZItemTiers then return end
 --    if not container then return end
 --    

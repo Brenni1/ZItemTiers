@@ -1,0 +1,680 @@
+-- Crafting tier system
+-- Implements Factorio-style crafting where output tier is based on ingredient tiers
+-- If all ingredients are Epic, output is at least Epic
+-- If ingredients have different tiers, output tier is based on their ratio/probability
+
+require "ZItemTiers/core"
+
+local logger = zdk.Logger.new("ZItemTiers", zdk.Logger.DEBUG)
+
+local function getRecipeData(logic)
+    if logic and logic.getRecipeData then
+        return logic:getRecipeData()
+    end
+    return nil
+end
+
+local function getCharacterId(character, defaultId)
+    if character and character.getOnlineID then
+        local onlineId = character:getOnlineID()
+        if onlineId == nil then
+            return defaultId
+        end
+        return onlineId
+    end
+    return defaultId
+end
+
+local function getContainerItems(container)
+    if container and container.getItems then
+        return container:getItems()
+    end
+    return nil
+end
+
+local function getItemId(item)
+    if item and item.getID then
+        return item:getID()
+    end
+    return nil
+end
+
+local function getItemType(item)
+    if item and item.getFullType then
+        return item:getFullType()
+    end
+    return nil
+end
+
+local function getOutputType(output)
+    if not output then return nil end
+    if output.getFullType then return output:getFullType() end
+    if output.getType then return output:getType() end
+    if type(output) == "string" then return output end
+    return nil
+end
+
+-- Hook into RecipeManager.PerformMakeItem to apply crafting tier
+-- We need to intercept the ItemRecipe creation to get the actual source items that will be consumed
+local function RecipeManager_PerformMakeItem(orig, recipe, item, character, containers, ...)
+    local logger = logger:withPrefix("PerformMakeItem() ")
+
+    -- Create a temporary ItemRecipe to get the source items that will actually be consumed
+    -- This matches what PerformMakeItem does internally
+    local sourceItems = nil
+    if recipe and RecipeManager then
+        -- Use the same approach as PerformMakeItem - create ItemRecipe to get source items
+        -- We need to use ItemRecipe.Alloc to get the actual items that will be consumed
+        if ItemRecipe and ItemRecipe.Alloc then
+            local tempItemRecipe = ItemRecipe.Alloc(recipe, character, containers, item, nil, false)
+            if tempItemRecipe then
+                -- Get source items before perform() is called
+                sourceItems = tempItemRecipe:getSourceItems()
+                -- Release the ItemRecipe (we don't want to actually perform it yet)
+                ItemRecipe.Release(tempItemRecipe)
+            end
+        end
+        
+        -- Fallback: try getAvailableItemsNeeded if ItemRecipe.Alloc doesn't work
+        if (not sourceItems or sourceItems:size() == 0) and RecipeManager.getAvailableItemsNeeded then
+            sourceItems = RecipeManager.getAvailableItemsNeeded(recipe, character, containers, item, nil)
+        end
+    end
+    
+    -- Store crafting state BEFORE performing recipe (for Actions.addOrDropItem hook)
+    local characterId = getCharacterId(character, nil)
+    
+    -- Calculate output tier BEFORE performing recipe (so we can store it in crafting state)
+    local outputTier = nil
+    if sourceItems and sourceItems:size() > 0 then
+        outputTier = ZItemTiers.CalculateCraftingTier({ src = sourceItems, player = character, recipe = recipe })
+        
+        -- Debug: log source items and their tiers
+        local debugMsg = "crafting with " .. sourceItems:size() .. " ingredients: "
+        for i = 0, sourceItems:size() - 1 do
+            local ing = sourceItems:get(i)
+            if ing then
+                local tier = ZItemTiers.GetItemTierKey(ing)
+                local fullType = ing:getFullType()
+                debugMsg = debugMsg .. fullType .. "(" .. tier .. ") "
+            end
+        end
+        logger:debug(debugMsg)
+        logger:debug("calculated output tier: %s", outputTier)
+        
+        -- Store crafting state for Actions.addOrDropItem hook
+        if characterId then
+            _craftingState[characterId] = {
+                tier = outputTier,
+                timestamp = getGameTime():getWorldAgeHours() or 0,
+                character = character
+            }
+            logger:debug("stored crafting state for characterId=%s with tier=%s", characterId, outputTier)
+        end
+    end
+    
+    -- Perform the recipe (consumes items, creates outputs)
+    local result = orig(recipe, item, character, containers, ...)
+    
+    -- Apply tier to created items if we got source items
+    -- Note: Some items might be added via Actions.addOrDropItem (which will handle them),
+    -- but items returned directly by PerformMakeItem should also be handled here
+    if result and result:size() > 0 and outputTier then
+        logger:debug("Applying tier to %d created items", result:size())
+        
+        -- Apply tier to all created items
+        for i = 0, result:size() - 1 do
+            local createdItem = result:get(i)
+            if createdItem and not ZItemTiers.IsItemBlacklisted(createdItem) then
+                -- Store tier in modData FIRST to prevent spawn_hooks from overriding it
+                local newZIT = ZItemTiers.GetOrCreateZIT(createdItem)
+                newZIT.itemTier = outputTier
+                newZIT.craftedFromTier = true  -- Flag to indicate this was crafted
+                
+                -- Apply the calculated tier
+                ZItemTiers.ApplyBonuses(createdItem, outputTier)
+                
+                -- Verify tier was applied
+                local verifyTier = ZItemTiers.GetItemTierKey(createdItem)
+                logger:debug("applied tier %s to created item: %s (verified: %s)", outputTier, createdItem:getFullType(), verifyTier)
+            end
+        end
+        
+        -- Clean up crafting state after items are created
+        if characterId and _craftingState[characterId] then
+            _craftingState[characterId] = nil
+            logger:debug("cleaned up crafting state for characterId=%s after PerformMakeItem", characterId)
+        end
+    else
+        if result and result:size() > 0 then
+            logger:warn("Could not get source items for crafting. sourceItems=%s, size=%s", sourceItems, (sourceItems and sourceItems:size()))
+        end
+        -- Clean up crafting state if we couldn't calculate tier
+        if characterId and _craftingState[characterId] then
+            _craftingState[characterId] = nil
+        end
+    end
+    
+    return result
+end
+
+-- Track crafting state to catch items created in OnCreate callbacks (like ripClothing)
+-- Maps character ID to crafting state (tier, timestamp)
+-- Expose through ZItemTiers so spawn_hooks can check if crafting is in progress
+ZItemTiers._craftingState = ZItemTiers._craftingState or {}
+local _craftingState = ZItemTiers._craftingState
+
+-- Hook into ISHandcraftAction:performRecipe to store crafting state before items are added
+-- This is needed because ISHandcraftAction calls Actions.addOrDropItem directly
+local function ISHandcraftAction_performRecipe(orig, self, ...)
+    local logger = logger:withPrefix("performRecipe() ")
+
+    -- Get consumed items BEFORE performing the recipe
+    local consumedItems = nil
+    if self.logic then
+        local recipeData = getRecipeData(self.logic)
+        if recipeData and recipeData.getAllConsumedItems then
+            consumedItems = ArrayList.new()
+            recipeData:getAllConsumedItems(consumedItems, false)
+        end
+    end
+    
+    -- Store crafting state BEFORE performing (for Actions.addOrDropItem hook)
+    local character = self.character
+    local characterId = getCharacterId(character, 0)
+    
+    -- Calculate output tier BEFORE performing recipe
+    local outputTier = nil
+    if characterId and consumedItems and consumedItems:size() > 0 then
+        -- Get recipe from logic for skill level calculation
+        local recipe = nil
+        if self.logic then
+            local recipeData = getRecipeData(self.logic)
+            if recipeData and recipeData.getRecipe then
+                recipe = recipeData:getRecipe()
+                logger:debug("retrieved recipe: %s", recipe)
+            else
+                logger:error("Could not retrieve recipe for ISHandcraftAction. recipeData=%s", recipeData)
+            end
+        else
+            logger:warn("No logic available for recipe retrieval")
+        end
+        
+        outputTier = ZItemTiers.CalculateCraftingTier({ src = consumedItems, player = character, recipe = recipe })
+        
+        -- Debug: log consumed items
+        local debugMsg = "crafting with " .. consumedItems:size() .. " ingredients: "
+        for i = 0, consumedItems:size() - 1 do
+            local ing = consumedItems:get(i)
+            if ing then
+                local tier = ZItemTiers.GetItemTierKey(ing)
+                local fullType = ing:getFullType()
+                debugMsg = debugMsg .. fullType .. "(" .. tier .. ") "
+            end
+        end
+        logger:debug(debugMsg)
+        logger:debug("calculated output tier: %s", outputTier)
+        
+        -- Get expected output item types from recipe (if available)
+        local expectedOutputTypes = {}
+        if recipe then
+            local outputs = nil
+            if recipe.getOutputs then
+                outputs = recipe:getOutputs()
+            elseif recipe.outputs then
+                outputs = recipe.outputs
+            end
+            if outputs then
+                -- outputs might be an ArrayList or table
+                if type(outputs) == "table" then
+                    -- Check if it's an ArrayList (has size() method)
+                    local size = outputs.size and outputs:size() or nil
+                    if size then
+                        -- It's an ArrayList
+                        for i = 0, size - 1 do
+                            local output = outputs:get(i)
+                            if output then
+                                local outputType = getOutputType(output)
+                                if outputType then
+                                    expectedOutputTypes[outputType] = true
+                                end
+                            end
+                        end
+                    else
+                        for _, outputType in ipairs(outputs) do
+                            if type(outputType) == "string" then
+                                expectedOutputTypes[outputType] = true
+                            end
+                        end
+                    end
+                end
+            end
+        end
+        
+        -- Take snapshot of existing item IDs BEFORE performing recipe (for OnContainerUpdate detection)
+        local preCraftItemIds = {}
+        if character and character.getInventory then
+            local inventory = character:getInventory()
+            if inventory then
+                local items = getContainerItems(inventory)
+                if items then
+                    for i = 0, items:size() - 1 do
+                        local item = items:get(i)
+                        if item then
+                            local itemId = getItemId(item)
+                            if itemId then
+                                preCraftItemIds[itemId] = true
+                            end
+                        end
+                    end
+                end
+            end
+        end
+        
+        -- Store tiers of consumed items for bundle/unbundle operations
+        local consumedTiers = {}
+        if consumedItems then
+            for i = 0, consumedItems:size() - 1 do
+                local consumedItem = consumedItems:get(i)
+                if consumedItem then
+                    -- Check if this is a bundle with stored tiers (unbundling scenario)
+                    local consumedModData = consumedItem:getModData()
+                    if consumedModData and consumedModData.bundledTiers then
+                        -- This is a bundle being unbundled - use stored tiers
+                        for _, storedTier in ipairs(consumedModData.bundledTiers) do
+                            table.insert(consumedTiers, storedTier)
+                        end
+                        logger:debug("found bundle with %d stored tiers for unbundling", #consumedModData.bundledTiers)
+                    else
+                        -- Regular item - use its tier (store ALL tiers including Common)
+                        local itemTier = ZItemTiers.GetItemTierKey(consumedItem)
+                        if itemTier then
+                            table.insert(consumedTiers, itemTier)
+                        else
+                            -- Default to Common if no tier found
+                            table.insert(consumedTiers, "Common")
+                        end
+                    end
+                end
+            end
+        end
+        
+        -- Store crafting state for Actions.addOrDropItem hook and OnContainerUpdate
+        _craftingState[characterId] = {
+            tier = outputTier,
+            timestamp = getGameTime():getWorldAgeHours() or 0,
+            character = character,
+            preCraftItemIds = preCraftItemIds,
+            expectedOutputTypes = expectedOutputTypes,
+            consumedTiers = consumedTiers  -- Store for bundle preservation
+        }
+        local itemCount = 0
+        for _ in pairs(preCraftItemIds) do
+            itemCount = itemCount + 1
+        end
+        local expectedTypesCount = 0
+        for _ in pairs(expectedOutputTypes) do
+            expectedTypesCount = expectedTypesCount + 1
+        end
+        logger:debug("stored crafting state for characterId=%s with tier=%s (snapshot: %d items, expected outputs: %d)", characterId, outputTier, itemCount, expectedTypesCount)
+    end
+    
+    -- Perform the original recipe (this will call Actions.addOrDropItem)
+    local result = orig(self, ...)
+    
+    -- Try to get created items directly from logic after recipe is performed
+    if characterId and _craftingState[characterId] and self.logic then
+        local state = _craftingState[characterId]
+        local createdItems = nil
+        if self.logic.getCreatedOutputItems then
+            local items = ArrayList.new()
+            self.logic:getCreatedOutputItems(items)
+            createdItems = items
+        end
+        
+        if createdItems and createdItems:size() > 0 then
+            logger:debug("found %d created items via getCreatedOutputItems", createdItems:size())
+            for i = 0, createdItems:size() - 1 do
+                local item = createdItems:get(i)
+                if item then
+                    local itemType = item:getFullType()
+                    local modData = item:getModData()
+                    if modData and not ZItemTiers.IsItemBlacklisted(item) then
+                        local currentTier = modData.itemTier
+                        local isCrafted = modData.craftedFromTier == true
+                        
+                        if not currentTier or (currentTier == "Common" and not isCrafted) then
+                            logger:debug("applying tier %s to created item: %s (was: %s)", state.tier, itemType, currentTier)
+                            modData.itemTier = state.tier
+                            modData.craftedFromTier = true
+                            
+                            -- If this is a bundle and we have consumed tiers, store them for later restoration
+                            if state.consumedTiers and #state.consumedTiers > 0 then
+                                if string.find(itemType, "Bundle") then
+                                    modData.bundledTiers = state.consumedTiers
+                                    logger:debug("stored %d consumed tiers in bundle modData for item: %s", #state.consumedTiers, itemType)
+                                end
+                            end
+                            
+                            ZItemTiers.ApplyBonuses(item, state.tier)
+                            logger:debug("applied tier %s to created item: %s (was: %s)", state.tier, itemType, currentTier)
+                        else
+                            logger:debug("item already has tier: %s (skipping) - itemType: %s", currentTier, itemType)
+                        end
+                    end
+                end
+            end
+            -- Clean up state immediately since we handled it
+            _craftingState[characterId] = nil
+            logger:debug("cleaned up crafting state for characterId=%s after direct item application", characterId)
+        else
+            -- Fallback: use OnTick to scan inventory for new items
+            logger:debug("could not get created items directly from logic. createdItems=%s", createdItems)
+        local cleanupCharacterId = characterId
+        local cleanupTicks = 0
+            local foundItem = false
+        Events.OnTick.Add(function()
+            cleanupTicks = cleanupTicks + 1
+                
+                -- Stop if we already found the item
+                if foundItem then
+                    return false
+                end
+                
+                -- Try to find items in inventory (check for up to 30 ticks)
+                if cleanupTicks <= 30 and _craftingState[cleanupCharacterId] then
+                    local state = _craftingState[cleanupCharacterId]
+                    if state and state.character and state.character.getInventory then
+                        local inventory = state.character:getInventory()
+                        if inventory then
+                            local items = getContainerItems(inventory)
+                            if items then
+                                local preCraftItemIds = state.preCraftItemIds or {}
+                                for i = 0, items:size() - 1 do
+                                    local item = items:get(i)
+                                    if item then
+                                        local itemId = getItemId(item)
+                                        
+                                        local modData = item:getModData()
+                                        if modData and not modData.craftedFromTier and not ZItemTiers.IsItemBlacklisted(item) then
+                                            local currentTier = modData.itemTier
+                                            local isNewItem = false
+                                            if itemId then
+                                                isNewItem = not preCraftItemIds[itemId]
+                                            end
+                                            
+                                            -- Only apply to new items (not in pre-craft snapshot)
+                                            if isNewItem then
+                                                local itemType = item:getFullType()
+                                                local expectedOutputTypes = state.expectedOutputTypes or {}
+                                                
+                                                -- Check if this item matches expected output types (if we have them)
+                                                local matchesExpected = true
+                                                -- Check if expectedOutputTypes has any entries by counting them
+                                                local hasEntries = false
+                                                local count = 0
+                                                for _ in pairs(expectedOutputTypes) do
+                                                    count = count + 1
+                                                    hasEntries = true
+                                                    break  -- Just need to know if it has entries
+                                                end
+                                                
+                                                if hasEntries then
+                                                    matchesExpected = expectedOutputTypes[itemType] == true
+                                                    if not matchesExpected then
+                                                        logger:debug("ZItemTiers: [ISHandcraftAction] OnTick: New item " .. itemType .. " does not match expected output types")
+                                                    end
+                                                end
+                                                
+                                                -- Apply tier if item is new and matches expected output (or if we don't have expected outputs)
+                                                if matchesExpected then
+                                                    logger:debug("ZItemTiers: [ISHandcraftAction] OnTick (tick " .. cleanupTicks .. "): Applying tier " .. state.tier .. " to new item: " .. itemType .. " (was: " .. tostring(currentTier) .. ")")
+                                                    modData.itemTier = state.tier
+                                                    modData.craftedFromTier = true
+                                                    ZItemTiers.ApplyBonuses(item, state.tier)
+                                                    foundItem = true
+                                                    _craftingState[cleanupCharacterId] = nil
+                                                    logger:debug("ZItemTiers: [ISHandcraftAction] OnTick: Cleaned up crafting state after finding item")
+                                                    return false
+                                                end
+                                            end
+                                        end
+                                    end
+                                end
+                            end
+                        end
+                    end
+                end
+                
+                -- Clean up after 30 ticks if still active
+                if cleanupTicks >= 30 then
+                    if _craftingState[cleanupCharacterId] then
+                        logger:debug("ZItemTiers: [ISHandcraftAction] Cleaned up crafting state for character " .. cleanupCharacterId .. " after " .. cleanupTicks .. " ticks (safety cleanup)")
+                    _craftingState[cleanupCharacterId] = nil
+                end
+                return false  -- Remove this event handler
+            end
+            return true
+        end)
+        end
+    end
+    
+    return result
+end
+
+-- Hook into Actions.addOrDropItem to catch crafted items
+-- This is called when items are added to inventory during crafting (both ISCraftAction and ISHandcraftAction)
+local function Actions_addOrDropItem(orig, character, item, ...)
+    -- Check if there's an active crafting state for this character
+    local hasAnyCraftingState = false
+    for _ in pairs(_craftingState) do
+        hasAnyCraftingState = true
+        break
+    end
+    if hasAnyCraftingState then
+        logger:debug("ZItemTiers: [addOrDropItem] ENTRY - character: " .. tostring(character ~= nil) .. ", item: " .. tostring(item ~= nil))
+    end
+
+    if character and item then
+        local characterId = getCharacterId(character, 0)
+
+        local itemType = getItemType(item)
+
+        -- Log all addOrDropItem calls if there's any active crafting state
+        if hasAnyCraftingState then
+            logger:debug("ZItemTiers: [addOrDropItem] Called for item: " .. tostring(itemType) .. " (characterId: " .. tostring(characterId) .. ", hasState: " .. tostring(characterId and _craftingState[characterId] ~= nil) .. ")")
+            -- Also log all active state IDs for debugging
+            local stateIds = {}
+            for id, _ in pairs(_craftingState) do
+                table.insert(stateIds, tostring(id))
+            end
+            logger:debug("ZItemTiers: [addOrDropItem] Active crafting state IDs: " .. table.concat(stateIds, ", "))
+            -- Also try to get character ID via different methods
+            local altId = character.getPlayerNum and character:getPlayerNum() or nil
+            logger:debug("ZItemTiers: [addOrDropItem] Character alt ID (getPlayerNum): " .. tostring(altId))
+        end
+
+        -- Check if this item is being added during crafting
+        -- Try to match by character ID first, then by character object
+        local matchedState = nil
+        if characterId and _craftingState[characterId] then
+            matchedState = _craftingState[characterId]
+        else
+            -- Fallback: match by character object
+            for id, state in pairs(_craftingState) do
+                if state and state.character == character then
+                    matchedState = state
+                    characterId = id
+                    logger:debug("ZItemTiers: [addOrDropItem] Matched crafting state by character object (id: " .. tostring(id) .. ")")
+                    break
+                end
+            end
+        end
+
+        if matchedState and matchedState.tier then
+            -- Check if item is blacklisted
+            if not ZItemTiers.IsItemBlacklisted(item) then
+                -- Check if item already has tier (might have been set by RecipeManager.PerformMakeItem)
+                local modData = item:getModData()
+                if modData then
+                    local currentTier = modData.itemTier
+                    local isCrafted = modData.craftedFromTier == true
+
+                    -- Check if we're unbundling (check consumed items for bundles with stored tiers)
+                    local tierToApply = matchedState.tier
+                    local unbundleTierIndex = matchedState._unbundleTierIndex or 0
+
+                    if matchedState.consumedTiers and #matchedState.consumedTiers > 0 then
+                        -- We have stored tiers from consumed items (unbundling scenario)
+                        unbundleTierIndex = unbundleTierIndex + 1
+                        if unbundleTierIndex <= #matchedState.consumedTiers then
+                            tierToApply = matchedState.consumedTiers[unbundleTierIndex]
+                            matchedState._unbundleTierIndex = unbundleTierIndex
+                            logger:debug("ZItemTiers: [addOrDropItem] Unbundling: Using stored tier " .. tierToApply .. " (index " .. unbundleTierIndex .. "/" .. #matchedState.consumedTiers .. ")")
+                        else
+                            -- Ran out of stored tiers - default to the overall calculated tier
+                            tierToApply = matchedState.tier
+                            logger:debug("ZItemTiers: [addOrDropItem] Unbundling: Ran out of stored tiers, falling back to overall tier: " .. tierToApply .. " (index " .. unbundleTierIndex .. " > " .. #matchedState.consumedTiers .. ")")
+                        end
+                    end
+
+                    -- Apply tier if item doesn't have it yet, or if it's Common (spawn_hooks might have set it)
+                    if not currentTier or (currentTier == "Common" and not isCrafted) then
+                        logger:debug("ZItemTiers: [addOrDropItem] Applying tier " .. tierToApply .. " to crafted item: " .. tostring(itemType) .. " (was: " .. tostring(currentTier) .. ")")
+                        modData.itemTier = tierToApply
+                        modData.craftedFromTier = true
+                        ZItemTiers.ApplyBonuses(item, tierToApply)
+                        logger:debug("ZItemTiers: [addOrDropItem] Applied tier " .. tierToApply .. " to crafted item: " .. tostring(itemType))
+                    else
+                        logger:debug("ZItemTiers: [addOrDropItem] Item already has tier: " .. tostring(currentTier) .. " (skipping)")
+                    end
+                else
+                    logger:debug("ZItemTiers: [addOrDropItem] WARNING: No modData for item: " .. tostring(itemType))
+                end
+            else
+                logger:debug("ZItemTiers: [addOrDropItem] Item is blacklisted: " .. tostring(itemType))
+            end
+        elseif matchedState then
+            logger:debug("ZItemTiers: [addOrDropItem] WARNING: Crafting state exists but no tier (state: " .. tostring(matchedState) .. ")")
+        end
+    end
+
+    return orig(character, item, ...)
+end
+
+-- Hook into OnContainerUpdate to catch items created in OnCreate callbacks
+-- This fires when items are added to containers (including player inventory)
+local function onContainerUpdateForCrafting(container)
+    if not container then return end
+    
+    -- Log if there are any active crafting states
+    local hasActiveCrafting = false
+    for _ in pairs(_craftingState) do
+        hasActiveCrafting = true
+        break
+    end
+    if hasActiveCrafting then
+        logger:debug("ZItemTiers: [OnContainerUpdate] Called (hasActiveCrafting: true)")
+    end
+    
+    -- Check all active crafting states and see if any match this container
+    for characterId, state in pairs(_craftingState) do
+        if state and state.character then
+            local isMatch = false
+            if state.character and state.character.getInventory then
+                local charInv = state.character:getInventory()
+                isMatch = charInv and charInv == container
+            end
+            
+            if isMatch then
+                local preCraftItemIds = state.preCraftItemIds or {}
+                logger:debug("ZItemTiers: [OnContainerUpdate] Container matches character " .. characterId .. " inventory")
+                local items = getContainerItems(container)
+                if items then
+                    logger:debug("ZItemTiers: [OnContainerUpdate] Checking " .. items:size() .. " items")
+                    local foundNewItems = false
+                    for i = 0, items:size() - 1 do
+                        local item = items:get(i)
+                        if item then
+                            -- Check if this is a new item (not in pre-craft snapshot)
+                            local isNewItem = false
+                            local itemId = getItemId(item)
+                            if itemId then
+                                isNewItem = not preCraftItemIds[itemId]
+                            end
+                            
+                            local modData = item:getModData()
+                            if modData then
+                                local hasTier = modData.itemTier ~= nil
+                                local currentTier = modData.itemTier or "Common"
+                                local isCrafted = modData.craftedFromTier == true
+                                local isBlacklisted = ZItemTiers and ZItemTiers.IsItemBlacklisted and ZItemTiers.IsItemBlacklisted(item) or false
+                                local itemType = item:getFullType()
+                                
+                                -- Apply tier to new items, or override Common tier on items created during crafting
+                                -- Be more aggressive: if item has Common tier and we're in a crafting state, override it
+                                local shouldApply = false
+                                if isNewItem and not isCrafted and not isBlacklisted then
+                                    -- New item created during crafting
+                                    shouldApply = true
+                                    logger:debug("ZItemTiers: [OnContainerUpdate] Detected new item: " .. itemType .. " (isNewItem=true)")
+                                elseif hasTier and currentTier == "Common" and not isCrafted and not isBlacklisted then
+                                    -- Item has Common tier but was created during crafting - override it
+                                    -- Don't require isNewItem here, as spawn_hooks might have applied Common before we could check
+                                    shouldApply = true
+                                    logger:debug("ZItemTiers: [OnContainerUpdate] Detected Common item to override: " .. itemType .. " (hasTier=" .. tostring(hasTier) .. ", currentTier=" .. currentTier .. ")")
+                                end
+                                
+                                if shouldApply then
+                                    foundNewItems = true
+                                    logger:debug("ZItemTiers: [OnContainerUpdate] Applying tier " .. state.tier .. " to item: " .. itemType .. " (was: " .. currentTier .. ")")
+                                    local zit = ZItemTiers.GetOrCreateZIT(item)
+                                    zit.itemTier = state.tier
+                                    zit.craftedFromTier = true
+                                    ZItemTiers.ApplyBonuses(item)
+                                    logger:debug("ZItemTiers: [OnContainerUpdate] Applied tier " .. state.tier .. " to OnCreate-crafted item: " .. itemType)
+                                else
+                                    -- Debug: log why we didn't apply
+                                    logger:debug("ZItemTiers: [OnContainerUpdate] Skipped item: " .. itemType .. " (isNewItem=" .. tostring(isNewItem) .. ", hasTier=" .. tostring(hasTier) .. ", currentTier=" .. tostring(currentTier) .. ", isCrafted=" .. tostring(isCrafted) .. ", isBlacklisted=" .. tostring(isBlacklisted) .. ")")
+                                end
+                            end
+                        end
+                    end
+                    
+                    -- Clean up state after processing (items are added immediately during OnCreate)
+                    if foundNewItems then
+                        -- Delay cleanup slightly to catch any items added in the same frame
+                        if not state._cleanupScheduled then
+                            state._cleanupScheduled = true
+                            local cleanupTicks = 0
+                            local cleanupCharacterId = characterId
+                            Events.OnTick.Add(function()
+                                cleanupTicks = cleanupTicks + 1
+                                -- Clean up after 5 ticks to allow all items to be added
+                                if cleanupTicks >= 5 then
+                                    if _craftingState[cleanupCharacterId] then
+                                        _craftingState[cleanupCharacterId] = nil
+                                        logger:debug("ZItemTiers: [OnContainerUpdate] Cleaned up crafting state for character " .. cleanupCharacterId)
+                                    end
+                                    return false  -- Remove this event handler
+                                end
+                                return true
+                            end)
+                        end
+                    else
+                        logger:debug("ZItemTiers: [OnContainerUpdate] No new items found without tier")
+                    end
+                end
+                break  -- Found matching state, no need to check others
+            end
+        end
+    end
+end
+
+zdk.hook({
+    Actions           = { addOrDropItem   = Actions_addOrDropItem },
+    RecipeManager     = { PerformMakeItem = RecipeManager_PerformMakeItem },
+    ISHandcraftAction = { performRecipe   = ISHandcraftAction_performRecipe },
+})
+
+Events.OnContainerUpdate.Add(onContainerUpdateForCrafting)

@@ -1,6 +1,6 @@
 -- now works with CleanUI as well
 
-zbHook({
+zdk.hook({
     -- Hook into ISInventoryItem.renderItemIcon() to set context before getItemNameColor is called
     -- CleanUI calls renderItemIcon() on line 2589 with the item as a parameter
     -- This is called before getItemNameColor() on line 2790, so we can set the context here

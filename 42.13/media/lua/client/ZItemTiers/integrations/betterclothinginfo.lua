@@ -17,7 +17,7 @@ local hasBetterClothingInfo = DoTooltipClothing ~= nil
 if not hasBetterClothingInfo then return end
 
 -- returns number of hooks applied
-local hookResult = zbHook({
+local hookResult = zdk.hook({
     _G = {
         SetItemInfoAsText = function(orig, newItemValue, label, layoutItem, layoutTooltip, ...)
 --            while true do
