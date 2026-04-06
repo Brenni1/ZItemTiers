@@ -58,14 +58,11 @@ local bonuses = {
         func      = function(base, t0) return base * (1 + 0.125 * t0) end,
     },
 
-    -- Item also sets setItemCapacity
+    -- Item also sets ItemCapacity
     Capacity                  = function(base, t0) return base * (1 + 0.125 * t0) end,                           --    1 .. 35
     MaxItemSize               = function(base, t0) return base * (1 + 0.250 * t0) end,                           -- 0.20 .. 2.00
-    Weight                    = {                                                                                -- 0.001 . 50
-        getter = "getActualWeight",
-        setter = "setActualWeight",
-        func   = function(base, t0) return base * (1 - 0.125 * t0) end,
-    },
+    ActualWeight              = function(base, t0) return base * (1 - 0.125 * t0) end,                           -- 0.001 . 50
+    Weight                    = function(base, t0) return base * (1 - 0.125 * t0) end,                           -- 0.001 . 50
     WeightReduction           = function(base, t0) return clamp(base + 5 * t0, 0, max(base, 90)) end,            --   30 .. 90
 
     UseDelta                  = function(base, t0) return base < 1 and clamp(base * (1 - 0.125 * t0), 0, _) end, -- 0.00001 .. 1.0
