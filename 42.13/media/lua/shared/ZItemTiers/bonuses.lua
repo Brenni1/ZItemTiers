@@ -61,11 +61,17 @@ local bonuses = {
     -- Item also sets ItemCapacity
     Capacity                  = function(base, t0) return base * (1 + 0.125 * t0) end,                           --    1 .. 35
     MaxItemSize               = function(base, t0) return base * (1 + 0.250 * t0) end,                           -- 0.20 .. 2.00
-    ActualWeight              = function(base, t0) return base * (1 - 0.125 * t0) end,                           -- 0.001 . 50
+    ActualWeight              = {                                                                                -- 0.001 . 50
+        func = function(base, t0) return base * (1 - 0.125 * t0) end,
+        hide = true,
+    },
     Weight                    = function(base, t0) return base * (1 - 0.125 * t0) end,                           -- 0.001 . 50
     WeightReduction           = function(base, t0) return clamp(base + 5 * t0, 0, max(base, 90)) end,            --   30 .. 90
 
-    UseDelta                  = function(base, t0) return base < 1 and clamp(base * (1 - 0.125 * t0), 0, _) end, -- 0.00001 .. 1.0
+    UseDelta                  = {                                                                                -- 0.00001 .. 1.0
+        func = function(base, t0) return base < 1 and clamp(base * (1 - 0.125 * t0), 0, _) end,
+        hide = true,
+    },
 
     RecoilDelay               = function(base, t0) return clamp(base - t0, 0, _) end,                            -- 11 .. 33
     ReloadTime                = function(base, t0) return clamp(base - 2 * t0, 0, _) end,                        -- 25 .. 30
@@ -140,13 +146,11 @@ local bonuses = {
 local function expand(key)
     local decl = bonuses[key]
     if type(decl) == "function" then
-        return {
-            func       = decl,
-            getter     = "get" .. key,
-            setter     = "set" .. key,
-            categories = {},
-        }
+        decl = { func = decl }
     end
+    decl.categories = {}
+    decl.getter = decl.getter or ("get" .. key)
+    decl.setter = decl.setter or ("set" .. key)
     return decl
 end
 

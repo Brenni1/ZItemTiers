@@ -1,7 +1,5 @@
 -- Tooltip display for item tier and bonuses
 
-require "ZItemTiers/core"
-
 ZItemTiers.pad = ZItemTiers.pad or 15
 
 -- Helper function to check if item has tier
@@ -22,7 +20,7 @@ function ZItemTiers.addTierToLayout(item, layout)
     
     -- Get tier and bonuses from item
     local tier = ZItemTiers.GetItemTierKey(item)
-    local bonuses = ZItemTiers.GetItemBonuses(item)
+    local bonuses = ZItemTiers.GetItemShownBonuses(item)
     
     local tierData = ZItemTiers.Tiers[tier]
     local color = tierData.color
@@ -83,47 +81,50 @@ end
 
 local function createTierLayout(tooltipObj, item)
     local layout = tooltipObj:beginLayout()
-    layout:setMinLabelWidth(110)
+    --layout:setMinLabelWidth(110)
     ZItemTiers.addTierToLayout(item, layout)
     return layout
 end
 
-zdk.hook({
-    ISToolTipInv = {
-        render = function(orig, self)
-            -- local padX = Math.max(TextManager.instance:MeasureStringX(self.tooltip:getFont(), "W"), 8) -- as in ObjectTooltip.java
+-- try to hook the last override of ISToolTipInv
+Events.OnGameStart.Add(function()
+    zdk.hook({
+        ISToolTipInv = {
+            render = function(orig, self)
+                -- local padX = Math.max(TextManager.instance:MeasureStringX(self.tooltip:getFont(), "W"), 8) -- as in ObjectTooltip.java
 
-            orig(self)
-            if not self.item then return end
+                orig(self)
+                if not self.item then return end
 
-            local w0 = self:getWidth()
-            local h0 = self:getHeight()
+                local w0 = self:getWidth()
+                local h0 = self:getHeight()
 
-            local bonuses = ZItemTiers.GetItemBonuses(self.item)
-            local h1 = (table_size(bonuses) + 1) * self.tooltip:getLineSpacing()
+                local bonuses = ZItemTiers.GetItemShownBonuses(self.item)
+                local h1 = (table_size(bonuses) + 1) * self.tooltip:getLineSpacing()
 
-            self.tooltip:setMeasureOnly(true)
-            local layout = createTierLayout(self.tooltip, self.item)
-            local startX = ZItemTiers.pad
-            local startY = h0
-            layout:render(startX, startY, self.tooltip)
-            self.tooltip:setMeasureOnly(false)
+                self.tooltip:setMeasureOnly(true)
+                local layout = createTierLayout(self.tooltip, self.item)
+                local startX = ZItemTiers.pad
+                local startY = h0
+                layout:render(startX, startY, self.tooltip)
+                self.tooltip:setMeasureOnly(false)
 
-            local w1 = math.max(w0, self.tooltip:getWidth())
-            -- local h1 = self.tooltip:getHeight() -- returns incorrect hieght for some reason
+                local w1 = math.max(w0, self.tooltip:getWidth())
+                -- local h1 = self.tooltip:getHeight() -- returns incorrect hieght for some reason
 
-            self:drawRect      (0, h0, w1, h1, self.backgroundColor.a, self.backgroundColor.r, self.backgroundColor.g, self.backgroundColor.b)
-            self:drawRectBorder(0, h0, w1, h1, self.borderColor.a,     self.borderColor.r,     self.borderColor.g,     self.borderColor.b)
+                self:drawRect      (0, h0, w1, h1, self.backgroundColor.a, self.backgroundColor.r, self.backgroundColor.g, self.backgroundColor.b)
+                self:drawRectBorder(0, h0, w1, h1, self.borderColor.a,     self.borderColor.r,     self.borderColor.g,     self.borderColor.b)
 
-            layout:render(startX, startY, self.tooltip)
-            self.tooltip:endLayout(layout)
+                layout:render(startX, startY, self.tooltip)
+                self.tooltip:endLayout(layout)
 
-            if self:getWidth() < w1 then
-                self:setWidth(w1)
-            end
-            if self:getHeight() < h0 + h1 then
-                self:setHeight(h0 + h1)
-            end
-        end,
-    }
-})
+                if self:getWidth() < w1 then
+                    self:setWidth(w1)
+                end
+                if self:getHeight() < h0 + h1 then
+                    self:setHeight(h0 + h1)
+                end
+            end,
+        }
+    })
+end)

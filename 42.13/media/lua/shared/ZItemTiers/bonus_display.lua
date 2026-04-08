@@ -1,9 +1,21 @@
 ZItemTiers = ZItemTiers or {}
 
--- Get bonuses for an item (for display in tooltips)
+-- Get bonuses for an item - all bonuses
 function ZItemTiers.GetItemBonuses(item)
     local zit = ZItemTiers.GetZIT(item)
     return zit and zit.bonuses or {}
+end
+
+-- Get bonuses for an item - skip hidden ones - for display in tooltips
+function ZItemTiers.GetItemShownBonuses(item)
+    local all_bonuses = ZItemTiers.GetItemBonuses(item) or {}
+    local result = {}
+    for k,v in pairs(all_bonuses) do
+        if ZItemTiers.Bonuses[k] and not ZItemTiers.Bonuses[k].hide then
+            result[k] = v
+        end
+    end
+    return result
 end
 
 -- Add weight-related bonuses (weight reduction and encumbrance reduction)
