@@ -4,23 +4,27 @@ local logger = ZItemTiers.logger
 
 -- Blacklist of items that should never have tier assigned
 -- Items in this list will never receive tier bonuses
-ZItemTiers.BlacklistedItems = {
-    ["Base.Brochure"]           = true,
-    ["Base.CarKey"]             = true,
-    ["Base.CombinationPadlock"] = true,
-    ["Base.Flier"]              = true,
-    ["Base.GolfTee"]            = true,
-    ["Base.IDcard"]             = true,
-    ["Base.IDcard_Female"]      = true,
-    ["Base.IDcard_Male"]        = true,
-    ["Base.Key_Blank"]          = true,
-    ["Base.Key1"]               = true,
-    ["Base.KeyPadlock"]         = true,
-    ["Base.Map"]                = true,
-    ["Base.Padlock"]            = true,
-    ["Base.Splinters"]          = true,
-    ["Base.UnusableWood"]       = true,
-    -- VHS tapes (blacklisted by pattern in IsItemBlacklisted; bonus commented out for now)
+ZItemTiers.NoTierItems = {
+    getDisplayCategory = {
+        ["Ammo"] = true,
+    },
+    getFullType = {
+        ["Base.Brochure"]           = true,
+        ["Base.CarKey"]             = true,
+        ["Base.CombinationPadlock"] = true,
+        ["Base.Flier"]              = true,
+        ["Base.GolfTee"]            = true,
+        ["Base.IDcard"]             = true,
+        ["Base.IDcard_Female"]      = true,
+        ["Base.IDcard_Male"]        = true,
+        ["Base.Key_Blank"]          = true,
+        ["Base.Key1"]               = true,
+        ["Base.KeyPadlock"]         = true,
+        ["Base.Map"]                = true,
+        ["Base.Padlock"]            = true,
+        ["Base.Splinters"]          = true,
+        ["Base.UnusableWood"]       = true,
+    }
 }
 
 -- TODO: remove?
@@ -137,11 +141,14 @@ end
 function ZItemTiers.IsItemBlacklisted(item)
     if not item then return true end
     
-    -- Check if item is in the blacklist by full type name
-    local fullType = item:getFullType()
-    if fullType and ZItemTiers.BlacklistedItems[fullType] then
-        return true
+    for getterName, values in pairs(ZItemTiers.NoTierItems) do
+        local getter = item[getterName]
+        if getter then
+            local value = getter(item)
+            if value and values[value] then return true end
+        end
     end
+
     -- VHS tapes: blacklist by pattern (any fullType containing "VHS")
     if fullType and string.find(fullType, "VHS") then
         return true
@@ -280,7 +287,7 @@ function ZItemTiers.ApplyBonuses(item, forceTier)
                         }
                     end
                 else
-                    logger:warn("%s: no %s(), itemCategory=%s", item, bonus.setter, itemCategory)
+                    logger:debug("%s: no %s(), itemCategory=%s", item, bonus.setter, itemCategory)
                     nCatCache[key] = true -- cache that this category doesn't have this bonus to avoid future warnings
                 end
             end
