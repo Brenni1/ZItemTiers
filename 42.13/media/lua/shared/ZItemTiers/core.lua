@@ -21,6 +21,7 @@ ZItemTiers.NoTierItems = {
         ["Base.Key1"]               = true,
         ["Base.KeyPadlock"]         = true,
         ["Base.Map"]                = true,
+        ["Base.Money"]              = true,
         ["Base.Padlock"]            = true,
         ["Base.Splinters"]          = true,
         ["Base.UnusableWood"]       = true,
