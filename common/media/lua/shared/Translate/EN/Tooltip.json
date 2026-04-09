@@ -1,0 +1,11 @@
+{
+    Tooltip_ZIT_Bonus_BaseSpeed: "Swing speed",
+    Tooltip_ZIT_Bonus_ConditionLowerChanceOneIn: "Durability",
+    Tooltip_ZIT_Bonus_CriticalChance: "Critical chance",
+    Tooltip_ZIT_Bonus_HitChance: "Hit chance",
+    Tooltip_ZIT_Bonus_JamGunChance: "Chance to jam",
+    Tooltip_ZIT_Bonus_MaxDamage: "Max damage",
+    Tooltip_ZIT_Bonus_MaxRange: "Max range",
+    Tooltip_ZIT_Bonus_TreeDamage: "Tree damage",
+    Tooltip_ZIT_Bonus_WeaponLength: "Weapon length"
+}

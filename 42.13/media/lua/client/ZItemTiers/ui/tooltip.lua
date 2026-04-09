@@ -2,12 +2,57 @@
 
 ZItemTiers.pad = ZItemTiers.pad or 15
 
+local TRANSFORM_VALUES = {
+    Insulation      = function(x) return x*100 end,
+    HearingModifier = function(x) return -x end,
+    VisionModifier  = function(x) return -x end,
+    WaterResistance = function(x) return x*100 end,
+    Windresistance  = function(x) return x*100 end,
+}
+
 -- Helper function to check if item has tier
 local function hasTier(item)
     if not item then return false end
     
     local zit = ZItemTiers.GetOrCreateZIT(item)
     return zit.itemTier ~= nil and zit.itemTier ~= "Common"
+end
+
+local _i18n_cache = {}
+local function getBonusDisplayName(bonusType)
+    if _i18n_cache[bonusType] then return _i18n_cache[bonusType] end
+
+    local bonus = ZItemTiers.Bonuses[bonusType]
+    if bonus and bonus.tipKey then
+        local result = getTextOrNull("Tooltip_" .. bonus.tipKey)
+        if result then
+            _i18n_cache[bonusType] = result
+            return result
+        end
+    end
+
+    -- "Tooltip_item_VisionImpariment":  "Vision Impairment",
+    -- "Tooltip_item_HearingImpariment": "Hearing Impairment",
+    if bonusType:contains("Modifier") then
+        local result = (
+            getTextOrNull("Tooltip_item_" .. bonusType:gsub("Modifier", "Impariment")) or
+            getTextOrNull("Tooltip_item_" .. bonusType:gsub("Modifier", "Impairment"))
+        )
+        if result then
+            _i18n_cache[bonusType] = result
+            return result
+        end
+    end
+
+    local result = (
+        getTextOrNull("Tooltip_ZIT_Bonus_" .. bonusType) or
+        getTextOrNull("Tooltip_" .. bonusType) or
+        getTextOrNull("Tooltip_item_" .. bonusType) or
+        getTextOrNull("Tooltip_item_" .. bonusType:gsub("Modifier", "")) or
+        bonusType
+    )
+    _i18n_cache[bonusType] = result
+    return result
 end
 
 -- Helper function to add tier information to a tooltip layout
@@ -34,18 +79,15 @@ function ZItemTiers.addTierToLayout(item, layout, font)
     -- Add each bonus on its own row with empty label
     -- Each bonus row shows just the bonus text on the right (e.g., "+20% Damage")
     for bonusKey, bonus in pairs(bonuses) do
-        local bonusName = ZItemTiers.GetBonusDisplayName(bonusKey)
-
         local delta     = bonus.modified - bonus.base
         local abs_delta = math.abs(delta)
-        local bonusText
-        
-        if abs_delta >= 0.01 then
-            bonusText = string.format("%+.2f", delta)
-        else
-            bonusText = string.format("%+.4f", delta)
+
+        local bonusName = getBonusDisplayName(bonusKey)
+        if TRANSFORM_VALUES[bonusKey] then
+            delta = TRANSFORM_VALUES[bonusKey](delta)
         end
 
+        local bonusText = abs_delta >= 0.01 and string.format("%+.2f", delta) or string.format("%+.4f", delta)
         local bonusItem = layout:addItem()
         bonusItem:setLabel(bonusName, color.r, color.g, color.b, 1.0)
         bonusItem:setValue(bonusText, color.r, color.g, color.b, 1.0)

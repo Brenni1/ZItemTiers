@@ -275,8 +275,9 @@ function ZItemTiers.ApplyBonuses(item, forceTier)
 
         for key, bonus in pairs(bonuses) do
             if not nCatCache[key] then
-                local target = item
-                local base   = itemScriptTbl[key:lower()] or (scriptItem[bonus.getter] and scriptItem[bonus.getter](scriptItem))
+                local target  = item
+                local base    = itemScriptTbl[key:lower()] or (scriptItem[bonus.getter] and scriptItem[bonus.getter](scriptItem))
+                local applied = false
 
                 if bonus.component then -- e.g. FluidContainer
                     base = nil
@@ -290,18 +291,26 @@ function ZItemTiers.ApplyBonuses(item, forceTier)
                 if bonus.applyIfNull or (base and (base ~= 0 or bonus.applyIfZero)) then
                     if target and target[bonus.setter] then
                         base = base or 0 -- when applyIfNull is true, treat nil as 0 for bonus calculation
-                        local modified = bonus:func(base, t0)
+                        local modified = bonus:func(base, t0, item)
                         if modified and modified ~= base then
                             target[bonus.setter](target, modified)
+                            if bonus.afterSet then
+                                bonus:afterSet(item, base, modified)
+                            end
                             zit.bonuses[key] = {
                                 base     = base,
                                 modified = modified,
                             }
+                            applied = true
                         end
                     else
                         logger:debug("%s: no %s(), itemCategory=%s", item, bonus.setter, itemCategory)
                         nCatCache[key] = true -- cache that this category doesn't have this bonus to avoid future warnings
                     end
+                end
+
+                if not applied and zit.bonuses[key] then
+                    zit.bonuses[key] = nil
                 end
             end
         end
@@ -348,32 +357,12 @@ end
 ---@param item InventoryItem
 ---@return string
 function ZItemTiers.GetItemTierKey(item)
-    if not item then return "Common" end
+    if not item then return nil end
     
     local zit = ZItemTiers.GetZIT(item)
     return (zit and zit.itemTier) or "Common"
 end
 
--- Get bonus display name
-function ZItemTiers.GetBonusDisplayName(bonusType)
-    local displayNames = {
-        WeightReduction = "Weight Reduction",
-        EncumbranceReduction = "Encumbrance Reduction",
-        MaxEncumbranceBonus = "Max Item Encumbrance",
-        DamageMultiplier = "Damage",
-        RunSpeedModifier = "Run Speed",
-        BiteDefenseBonus = "Bite Defense",
-        ScratchDefenseBonus = "Scratch Defense",
-        CapacityBonus = "Capacity",
-        DrainableCapacityBonus = "Liquid Capacity",
-        VisionImpairmentReduction = "Vision Impairment Reduction",
-        HearingImpairmentReduction = "Hearing Impairment Reduction",
-        MoodBonus = "Mood Benefits",
-        ReadingSpeedBonus = "Reading Speed",
-        VhsSkillXpBonus = "Skill XP Bonus",
-    }
-    return displayNames[bonusType] or bonusType
-end
 
 -- Calculate output tier based on ingredient tiers (Factorio-style)
 -- Returns the calculated tier name

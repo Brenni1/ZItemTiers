@@ -29,74 +29,93 @@ local function neg_affine_scale(base, t0, minValue)
     return value
 end
 
+local function ConditionMax_afterSet(self, item, base, modified)
+    if item.getCondition and item:getCondition() == base then
+        item:setCondition(modified)
+    end
+end
+
+local function FluidCapacity_afterSet(self, item, base, modified)
+    local fluidCont = item:getFluidContainer()
+    if fluidCont and fluidCont:getAmount() == base then
+        fluidCont:addFluid(fluidCont:getPrimaryFluid(), modified - base)
+    end
+end
+
+local function HungerChange_afterSet(self, item, base, modified)
+    if item.getHungChange and item:getHungChange() == base then
+        item:setHungChange(modified)
+    end
+end
+
 local bonuses = {
     All = {
         ConditionLowerChanceOneIn = { step = 1, altName = "ConditionLowerChance" },
-        Condition                 = { step = 1 },
-        ConditionMax              = { step = 1 },
+        ConditionMax              = { step = 1, hide = true, afterSet = ConditionMax_afterSet },
 
         ActualWeight              = { scale = 0.5, hide = true },
         Weight                    = { scale = 0.5 },
 
         UseDelta                  = { scale = 0.5, hide = true, cond = function(base) return base < 1.0 end },
 
-        FluidCapacity             = { scale = 2.0, component = (ComponentType and ComponentType.FluidContainer), altName = "Capacity" },
+        FluidCapacity             = { scale = 2.0, component = (ComponentType and ComponentType.FluidContainer), altName = "Capacity", afterSet = FluidCapacity_afterSet },
 
         AlcoholPower              = { scale = 1.5 },
         BandagePower              = { scale = 1.5 },
-        BoredomChange             = { step = -5 },
+        BoredomChange             = { step = -5,                                    tipKey = "literature_Boredom_Reduction" },
         FatigueChange             = { step = -5, div = 100 },
         fluReduction              = { scale = 2.0 },
-        HungerChange              = { step = -5, div = 100, altName = "BaseHunger" },
+        HungerChange              = { step = -5, div = 100, altName = "BaseHunger", tipKey = "food_Hunger", afterSet = HungerChange_afterSet },
         painReduction             = { scale = 2.0 },
-        StressChange              = { step = -5, div = 100 },
-        ThirstChange              = { step = -5, div = 100 },
-        UnhappyChange             = { step = -5 },
+        StressChange              = { step = -5, div = 100,                         tipKey = "literature_Stress_Reduction" },
+        ThirstChange              = { step = -5, div = 100,                         tipKey = "food_Thirst" },
+        UnhappyChange             = { step = -5,                                    tipKey = "food_Unhappiness" },
     },
 
     Clothing = {
-        ChanceToFall              = { step = -5,    min = 0 },
+        ChanceToFall              = { step = -5, min = 0 },
 
         CombatSpeedModifier       = { step =  0.01, clamp1 = true },
         DiscomfortModifier        = { step = -0.05 },
         HearingModifier           = { step =  0.05, max = 1 },
-        NeckProtectionModifier    = { step =  0.05, max = 1 },
+        NeckProtectionModifier    = { step =  0.05, max = 1, hide = true },
         RunSpeedModifier          = { step =  0.05, clamp1 = true },
         VisionModifier            = { step =  0.05, max = 1 },
 
         Insulation                = { step =  0.05, max = 1 },
-        WaterResistance           = { step =  0.05, max = 1 },
-        Windresistance            = { step =  0.05, max = 1 },
+        WaterResistance           = { step =  0.05, max = 1,                        tipKey = "item_Waterresist" },
+        Windresistance            = { step =  0.05, max = 1,                        tipKey = "item_Windresist" },
 
-        BiteDefense               = { step =     5, max = 100 },
-        BulletDefense             = { step =     5, max = 100 },
-        CorpseSicknessDefense     = { step =     5, max = 100 },
-        ScratchDefense            = { step =     5, max = 100 },
+        BiteDefense               = { step =  5, max = 100 },
+        BulletDefense             = { step =  5, max = 100 },
+        CorpseSicknessDefense     = { step =  5, max = 100 },
+        ScratchDefense            = { step =  5, max = 100 },
 
         StompPower                = { scale = 1.5 },
 
-        Thermoregulation          = { step = 0.05, applyIfNull = true },
+        Thermoregulation          = { step = 5, applyIfNull = true, cond = function(_, t0, item) return t0 > 1 and item.getInsulation and item:getInsulation() > 0 end },
     },
 
     Container = {
-        Capacity                  = { scale = 1.5 }, -- XXX check ItemCapacity
+        Capacity                  = { scale = 1.5 },
+        ItemCapacity              = { scale = 1.5, hide = true },
         MaxItemSize               = { scale = 2.0 },
         WeightReduction           = { step = 5, max = 95 },
     },
 
     HandWeapon = {
-        BaseSpeed                 = { step = -0.05 },
-        CritDmgMultiplier         = { step = 0.5, altName = "CriticalDamageMultiplier" },
+        BaseSpeed                 = { step = 0.05 },
+        CritDmgMultiplier         = { step = 0.5, altName = "CriticalDamageMultiplier", hide = true },
         CriticalChance            = { step =  5, max = 90 },
         HitChance                 = { step =  5, max = 99 },
         JamGunChance              = { step = -0.25, min = 0 },
         MaxDamage                 = { affine = true },
         MaxRange                  = { affine = true },
-        MinimumSwingTime          = { neg_affine = true },
-        PushBackMod               = { affine = 1.0 },
-        RecoilDelay               = { step = -1, min = 0 },
-        ReloadTime                = { step = -2, min = 1 },
-        SwingTime                 = { neg_affine = true },
+        MinimumSwingTime          = { neg_affine = true, hide = true },
+        PushBackMod               = { affine = 1.0, hide = true },
+        RecoilDelay               = { step = -1, min = 0, hide = true },
+        ReloadTime                = { step = -2, min = 1, hide = true },
+        SwingTime                 = { neg_affine = true, hide = true },
         TreeDamage                = { scale = 1.5 },
         WeaponLength              = { affine = true },
     },
@@ -116,8 +135,8 @@ local bonuses = {
     },
 }
 
-local function bonus_func(self, base, t0)
-    if self.cond and not self.cond(base, t0) then return end
+local function bonus_func(self, base, t0, item)
+    if self.cond and not self.cond(base, t0, item) then return end
     if self.min and base < self.min then return end
     if self.max and base > self.max then return end
 
