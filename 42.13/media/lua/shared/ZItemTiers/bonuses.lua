@@ -1,4 +1,5 @@
 ZItemTiers = ZItemTiers or {}
+local logger = zdk.Logger.new("ZItemTiers")
 
 -- common  uncomm  rare    epic    legendary
 -- 0.010   0.015   0.020   0.026   0.031
@@ -28,133 +29,145 @@ local function neg_affine_scale(base, t0, minValue)
     return value
 end
 
--- for the sake of compactness
-local _     = nil        -- "_ in Lua is like a napkin at dinner: completely ordinary, but everyone silently agrees what it’s for." (c) ChatGPT
-local clamp = zdk.clamp
-local max   = math.max
-
 local bonuses = {
-    CombatSpeedModifier       = function(base, t0) return clamp(base + 0.01 * t0, _, base < 1 and 1) end,  -- 0.90 .. 0.99
-    -- needs java patch, see IsoGameCharacter.updateDiscomfortModifiers() as well
-    DiscomfortModifier        = function(base, t0) return clamp(base - 0.05 * t0, 0, _) end,               -- 0.02 .. 0.75 JAVA
-    NeckProtectionModifier    = function(base, t0) return clamp(base + 0.05 * t0, _, 1) end,               -- 0.30 .. 0.50
-    RunSpeedModifier          = function(base, t0) return clamp(base + 0.05 * t0, _, base < 1 and 1) end,  -- 0.70 .. 1.10 JAVA for containers, LUA for Clothing
-    HearingModifier           = function(base, t0) return clamp(base + 0.05 * t0, _, 1) end,               -- 0.50 .. 0.85 JAVA
-    VisionModifier            = function(base, t0) return clamp(base + 0.05 * t0, _, 1) end,               -- 0.25 .. 0.75 JAVA
+    All = {
+        ConditionLowerChanceOneIn = { step = 1, altName = "ConditionLowerChance" },
+        Condition                 = { step = 1 },
+        ConditionMax              = { step = 1 },
+
+        ActualWeight              = { scale = 0.5, hide = true },
+        Weight                    = { scale = 0.5 },
+
+        UseDelta                  = { scale = 0.5, hide = true, cond = function(base) return base < 1.0 end },
+
+        FluidCapacity             = { scale = 2.0, component = (ComponentType and ComponentType.FluidContainer), altName = "Capacity" },
+
+        AlcoholPower              = { scale = 1.5 },
+        BandagePower              = { scale = 1.5 },
+        BoredomChange             = { step = -5 },
+        FatigueChange             = { step = -5, div = 100 },
+        fluReduction              = { scale = 2.0 },
+        HungerChange              = { step = -5, div = 100, altName = "BaseHunger" },
+        painReduction             = { scale = 2.0 },
+        StressChange              = { step = -5, div = 100 },
+        ThirstChange              = { step = -5, div = 100 },
+        UnhappyChange             = { step = -5 },
+    },
+
+    Clothing = {
+        ChanceToFall              = { step = -5,    min = 0 },
+
+        CombatSpeedModifier       = { step =  0.01, clamp1 = true },
+        DiscomfortModifier        = { step = -0.05 },
+        HearingModifier           = { step =  0.05, max = 1 },
+        NeckProtectionModifier    = { step =  0.05, max = 1 },
+        RunSpeedModifier          = { step =  0.05, clamp1 = true },
+        VisionModifier            = { step =  0.05, max = 1 },
+
+        Insulation                = { step =  0.05, max = 1 },
+        WaterResistance           = { step =  0.05, max = 1 },
+        Windresistance            = { step =  0.05, max = 1 },
+
+        BiteDefense               = { step =     5, max = 100 },
+        BulletDefense             = { step =     5, max = 100 },
+        CorpseSicknessDefense     = { step =     5, max = 100 },
+        ScratchDefense            = { step =     5, max = 100 },
+
+        StompPower                = { scale = 1.5 },
+
+        Thermoregulation          = { step = 0.05, applyIfNull = true },
+    },
+
+    Container = {
+        Capacity                  = { scale = 1.5 }, -- XXX check ItemCapacity
+        MaxItemSize               = { scale = 2.0 },
+        WeightReduction           = { step = 5, max = 95 },
+    },
+
+    HandWeapon = {
+        BaseSpeed                 = { step = -0.05 },
+        CritDmgMultiplier         = { step = 0.5, altName = "CriticalDamageMultiplier" },
+        CriticalChance            = { step =  5, max = 90 },
+        HitChance                 = { step =  5, max = 99 },
+        JamGunChance              = { step = -0.25, min = 0 },
+        MaxDamage                 = { affine = true },
+        MaxRange                  = { affine = true },
+        MinimumSwingTime          = { neg_affine = true },
+        PushBackMod               = { affine = 1.0 },
+        RecoilDelay               = { step = -1, min = 0 },
+        ReloadTime                = { step = -2, min = 1 },
+        SwingTime                 = { neg_affine = true },
+        TreeDamage                = { scale = 1.5 },
+        WeaponLength              = { affine = true },
+    },
+
+    WeaponPart = {
+        AimingTimeModifier        = { step = -0.5, min = 0,  altName = "AimingTime" },
+        HitChanceModifier         = { step =  5,   max = 99, altName = "HitChance" },
+        MaxRangeModifier          = { step =  0.2,           altName = "MaxRange" },
+        RecoilDelayModifier       = { step = -0.5, min = 0,  altName = "RecoilDelay" },
+        ReloadTimeModifier        = { step = -2,   min = 1,  altName = "ReloadTime" },
+        WeightModifier            = { scale = 0.5 },
+    },
                                                                                                                  
-    Insulation                = function(base, t0) return clamp(base + 0.05 * t0, _, 1) end,               -- 0.05 .. 1.00
-    WaterResistance           = function(base, t0) return clamp(base + 0.05 * t0, _, 1) end,               -- 0.20 .. 1.00
-    Windresistance            = function(base, t0) return clamp(base + 0.05 * t0, _, 1) end,               -- 0.10 .. 1.00
-
-    BiteDefense               = function(base, t0) return clamp(base + 5 * t0, _, 100) end,                --    7 .. 100
-    BulletDefense             = function(base, t0) return clamp(base + 5 * t0, _, 100) end,                --    5 .. 100
-    CorpseSicknessDefense     = function(base, t0) return clamp(base + 5 * t0, _, 100) end,                --   25
-    ScratchDefense            = function(base, t0) return clamp(base + 5 * t0, _, 100) end,                --    5 .. 100
-                                                                                                                 
-    FluidCapacity             = {                                                                          -- 0.10 .. 600
-        component = ComponentType.FluidContainer,
-        getter    = "getCapacity",
-        setter    = "setCapacity",
-        func      = function(base, t0) return base * (1 + 0.125 * t0) end,
+    Food = {
+        DaysFresh                 = { scale = 1.5 },
+        DaysTotallyRotten         = { scale = 1.5 },
     },
-
-    -- Item also sets ItemCapacity
-    Capacity                  = function(base, t0) return base * (1 + 0.125 * t0) end,                     --    1 .. 35
-    MaxItemSize               = function(base, t0) return base * (1 + 0.250 * t0) end,                     -- 0.20 .. 2.00
-    ActualWeight              = {                                                                          -- 0.001 . 50
-        func = function(base, t0) return base * (1 - 0.125 * t0) end,
-        hide = true,
-    },
-    Weight                    = function(base, t0) return base * (1 - 0.125 * t0) end,                     -- 0.001 . 50
-    WeightReduction           = function(base, t0) return clamp(base + 5 * t0, 0, max(base, 90)) end,      --   30 .. 90
-
-    UseDelta                  = {                                                                          -- 0.00001 .. 1.0
-        func = function(base, t0) return base < 1 and clamp(base * (1 - 0.125 * t0), 0, _) end,
-        hide = true,
-    },
-
-    RecoilDelay               = function(base, t0) return clamp(base - t0, 0, _) end,                      -- 11 .. 33
-    ReloadTime                = function(base, t0) return clamp(base - 2 * t0, 0, _) end,                  -- 25 .. 30
-                                                                                                                
-    ConditionLowerChanceOneIn = {                                                                          --  6 .. 8     also partially JAVA?
-        getter = "getConditionLowerChance",
-        setter = "setConditionLowerChance",
-        func   = function(base, t0) return base + t0 end,
-    },
-    -- TODO: setCondition when setting ConditionMax
-    ConditionMax              = function(base, t0) return base + t0 end,                                   -- 10 .. 12
-                                                                                                                
-    ChanceToFall              = function(base, t0) return clamp(base - 5 * t0, 0, _) end,                  --  0 .. 80
-                                                                                                                
-    JamGunChance              = function(base, t0) return clamp(base - 0.25 * t0, 0, _) end,               --  0 .. 2
-    CriticalChance            = function(base, t0) return base > 0 and clamp(base + 5 * t0, 0, 90) end,    -- 0,  5 .. 70
-    HitChance                 = function(base, t0) return base > 0 and clamp(base + 5 * t0, 0, 95) end,    -- 0, 45 .. 70
-                                                                                                                
-    AimingTimeModifier        = {                                                                          -- -10  .. 20
-        getter = "getAimingTime",
-        setter = "setAimingTime",
-        func   = function(base, t0) return base - 0.5 * t0 end,
-    },
-    MaxRangeModifier          = function(base, t0) return base + 0.2 * t0 end,                             -- -0.8 ..  7
-    RecoilDelayModifier       = function(base, t0) return base * (1 + 0.25 * t0) end,                      -- -2
-    WeightModifier            = function(base, t0) return base * (1 - 0.05 * t0) end,                      --  0  .. 0.8
-                                                                                                           
-    TreeDamage                = function(base, t0) return base > 0 and base * (1 + 0.05 * t0) end,         --  1    .. 55
-    BaseSpeed                 = function(base, t0) return base - 0.05 * t0 end,                            --  0.7  ..  1.4
-    CritDmgMultiplier         = {                                                                          --  1    .. 12
-        getter = "getCriticalDamageMultiplier",
-        setter = "setCriticalDamageMultiplier",
-        func   = function(base, t0) return base + 0.5 * t0 end,
-    },
-    MaxDamage                 = function(base, t0) return affine_scale(base, t0, _) end,                   --  0.1  ..  8
-    MaxRange                  = function(base, t0) return affine_scale(base, t0, _) end,                   --  0.6  .. 40
-    PushBackMod               = function(base, t0) return base > 0 and affine_scale(base, t0, 1.0) end,    --  0    ..  1
-    SwingTime                 = function(base, t0) return neg_affine_scale(base, t0, _) end,               --  0.5  ..  4
-    MinimumSwingTime          = function(base, t0) return neg_affine_scale(base, t0, _) end,               --  0.5  ..  4
-    WeaponLength              = function(base, t0) return affine_scale(base, t0, _) end,                   --  0.15 ..  0.7
-    StompPower                = function(base, t0) return base * (1 + 0.05 * t0) end,                      --  0.8  .. 2.5
-                                                                                                                
-    -- AlcoholedCottonBalls/AlcoholWipes                                                                        
-    AlcoholPower              = function(base, t0) return base * (1 + 0.125 * t0) end,                     -- 4
-    BandagePower              = function(base, t0) return base * (1 + 0.125 * t0) end,                     -- 0.5 .. 4
-
-    BoredomChange             = function(base, t0) return base - math.abs(base) * 0.25 * t0 end,           --  -50 ..   20
-    -- Item.java:
-    --   item.setFatigueChange(this.fatigueChange / 100.0f);
-    --   item.setStressChange(this.stressChange / 100.0f);
-    --   food.setThirstChange(this.thirstChange / 100.0f);
-    --   food.setHungChange(this.hungerChange / 100.0f);
-    --   food.setBaseHunger(this.hungerChange / 100.0f);
-    --   food.setEndChange(this.enduranceChange / 100.0f);
-    FatigueChange             = function(base, t0) return (base - math.abs(base) * 0.25 * t0) / 100 end,   --  -50 ..  -10
-    StressChange              = function(base, t0) return (base - math.abs(base) * 0.25 * t0) / 100 end,   --  -20 ..    1
-    HungerChange              = {                                                                          --   -1 .. -160
-        getter = "getBaseHunger",
-        setter = "setBaseHunger",
-        func   = function(base, t0) return (base - math.abs(base) * 0.25 * t0) / 100 end,
-    },
-    ThirstChange              = function(base, t0) return (base - math.abs(base) * 0.25 * t0) / 100 end,   -- -140 ..   60
-
-    UnhappyChange             = function(base, t0) return base - math.abs(base) * 0.25 * t0 end,           --  -50 ..  500
-                                                                                                                 
-    fluReduction              = function(base, t0) return base * (1 + 0.25 * t0) end,                      -- 5
-    painReduction             = function(base, t0) return base * (1 + 0.25 * t0) end,                      -- 7
-                                                                                                                 
-    DaysFresh                 = function(base, t0) return base > 0 and base * (1 + 0.25 * t0) end,         -- 0 .. 365
-    DaysTotallyRotten         = function(base, t0) return base > 0 and base * (1 + 0.25 * t0) end,         -- 0 .. 730
 }
 
-local function expand(key)
-    local decl = bonuses[key]
-    if type(decl) == "function" then
-        decl = { func = decl }
+local function bonus_func(self, base, t0)
+    if self.cond and not self.cond(base, t0) then return end
+    if self.min and base < self.min then return end
+    if self.max and base > self.max then return end
+
+    local result = nil
+    if self.step then
+        result = base + self.step * t0
+    elseif self.scale then
+        -- t0 is 0..4 where 0=Common and 4=Legendary.
+        -- Interpolate smoothly from base (t0=0) to base*scale (t0=4).
+        result = base * (1 + (self.scale - 1) * t0 / 4)
+    elseif self.affine then
+        local maxValue = (self.affine == true) and nil or self.affine
+        result = affine_scale(base, t0, maxValue)
+    elseif self.neg_affine then
+        local minValue = (self.neg_affine == true) and nil or self.neg_affine
+        result = neg_affine_scale(base, t0, minValue)
+    else
+        logger:error("Invalid bonus declaration: %s", self)
     end
-    decl.getter = decl.getter or ("get" .. key)
-    decl.setter = decl.setter or ("set" .. key)
+
+    if self.div then
+        result = result / self.div
+    end
+
+    if self.clamp1 and base < 1 then
+        result = zdk.clamp(result, nil, 1)
+    end
+
+    if self.min or self.max then
+        result = zdk.clamp(result, self.min, self.max)
+    end
+
+    return result
+end
+
+local function expand(decl, key)
+    decl.getter = decl.altName and ("get" .. decl.altName) or ("get" .. key)
+    decl.setter = decl.altName and ("set" .. decl.altName) or ("set" .. key)
+    decl.func = bonus_func
     return decl
 end
 
-ZItemTiers.Bonuses = ZItemTiers.Bonuses or {}
-for key, _ in pairs(bonuses) do
-    ZItemTiers.Bonuses[key] = expand(key)
+ZItemTiers.Bonuses    = ZItemTiers.Bonuses or {}
+ZItemTiers.CatBonuses = ZItemTiers.CatBonuses or {}
+
+for cat, cbonuses in pairs(bonuses) do
+    ZItemTiers.CatBonuses[cat] = ZItemTiers.CatBonuses[cat] or {}
+    for key, bonus in pairs(cbonuses) do
+        local expanded = expand(bonus, key)
+        ZItemTiers.Bonuses[key] = expanded
+        ZItemTiers.CatBonuses[cat][key] = expanded
+    end
 end

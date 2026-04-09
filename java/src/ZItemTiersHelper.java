@@ -7,18 +7,6 @@ import zombie.inventory.InventoryItem;
 
 @Exposer.LuaClass
 public class ZItemTiersHelper {
-    // public static boolean setField(Object obj, String fieldName, float value) {
-    //     if (obj == null || fieldName == null) {
-    //         return false;
-    //     }
-    // 
-    //     if (!(obj instanceof InventoryItem)) {
-    //         return false;  // Only allow InventoryItem or its subclasses
-    //     }
-    // 
-    //     return Accessor.trySet(obj, fieldName, value);
-    // }
-
     public static void Reset() {
         CustomAttributeStorage.clear();
     }

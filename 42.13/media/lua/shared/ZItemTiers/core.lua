@@ -28,10 +28,9 @@ ZItemTiers.NoTierItems = {
     }
 }
 
--- TODO: remove?
 -- Initialize global session ID for bonus tracking (initialized once per game session)
-if not ZItemTiers._bonusesAppliedSessionId then
-    ZItemTiers._bonusesAppliedSessionId = ZombRand(1000000)
+if not ZItemTiers.sid then
+    ZItemTiers.sid = ZombRand(1000000)
 end
 
 -- Tier probabilities: [Common, Uncommon, Rare, Epic, Legendary]
@@ -173,8 +172,7 @@ end
 -- Returns 1.0 (neutral) if item has no run speed modifier
 function ZItemTiers.GetBaseRunSpeedModifier(item, modData)
     -- Trust stored base only if from current session (prevents using stale 1.0 from old buggy code)
-    if modData and modData.itemRunSpeedModifierBase
-        and modData._bonusesApplied == ZItemTiers._bonusesAppliedSessionId then
+    if modData and modData.itemRunSpeedModifierBase and modData._bonusesApplied == ZItemTiers.sid then
         return modData.itemRunSpeedModifierBase
     end
 
@@ -232,7 +230,15 @@ local _negativeCategoryCache = {}
 ZItemTiers.negativeCategoryCache = _negativeCategoryCache -- for debug
 
 function ZItemTiers.ApplyBonuses(item, forceTier)
-    if ZItemTiers.IsItemBlacklisted(item) then return end
+    if ZItemTiers.IsItemBlacklisted(item) then
+        local zit = ZItemTiers.GetZIT(item)
+        if zit and zit.itemTier then
+            -- logger:debug("Removing tier from blacklisted item %s", item)
+            zit.itemTier = nil
+            zit.bonuses = nil
+        end
+        return
+    end
 
     if forceTier then
         ZItemTiers.SetItemTier(item, forceTier)
@@ -240,7 +246,7 @@ function ZItemTiers.ApplyBonuses(item, forceTier)
     local t0 = ZItemTiers.GetItemTierIndex0(item)
     if t0 == 0 then return end -- No bonuses for Common tier
 
---    logger:debug("Applying tier %d (%s) to %s", t0, ZItemTiers.GetTierNameFromT0(t0), item)
+    -- logger:debug("Applying tier %d (%s) to %s", t0, ZItemTiers.GetTierNameFromT0(t0), item)
     if t0 <= 0 then
         logger:error("Invalid tier index %d for item %s, skipping bonuses", t0, item)
         return
@@ -248,12 +254,13 @@ function ZItemTiers.ApplyBonuses(item, forceTier)
 
     local zit = ZItemTiers.GetOrCreateZIT(item)
     local curTime = getGameTime():getCalender():getTimeInMillis()
-    if zit.ts and curTime - zit.ts < 600000 then
+    if zit.sid == ZItemTiers.sid and zit.ts and curTime - zit.ts < 600000 then
         -- logger:debug("Bonuses already applied recently for %s, skipping", item)
         return
     end
 
-    zit.ts = curTime
+    zit.ts      = curTime
+    zit.sid     = ZItemTiers.sid
     zit.bonuses = zit.bonuses or {}
 
     local scriptItem    = item:getScriptItem()
@@ -263,37 +270,45 @@ function ZItemTiers.ApplyBonuses(item, forceTier)
     _negativeCategoryCache[itemCategory] = _negativeCategoryCache[itemCategory] or {}
     local nCatCache = _negativeCategoryCache[itemCategory]
 
-    for key, bonus in pairs(ZItemTiers.Bonuses) do
-        if not nCatCache[key] then
-            local target = item
-            local base   = itemScriptTbl[key:lower()] or (scriptItem[bonus.getter] and scriptItem[bonus.getter](scriptItem))
+    local function apply_bonuses(item, bonuses)
+        if not bonuses then return end
 
-            if bonus.component then -- e.g. FluidContainer
-                base = nil
-                target = item:getComponent(bonus.component)
-                if target then
-                    local compScript = scriptItem:getComponentScriptFor(bonus.component)
-                    base = compScript[bonus.getter] and compScript[bonus.getter](compScript)
-                end
-            end
+        for key, bonus in pairs(bonuses) do
+            if not nCatCache[key] then
+                local target = item
+                local base   = itemScriptTbl[key:lower()] or (scriptItem[bonus.getter] and scriptItem[bonus.getter](scriptItem))
 
-            if base and base ~= 0 then
-                if target and target[bonus.setter] then
-                    local modified = bonus.func(base, t0)
-                    if modified and modified ~= base then
-                        target[bonus.setter](target, modified)
-                        zit.bonuses[key] = {
-                            base     = base,
-                            modified = modified,
-                        }
+                if bonus.component then -- e.g. FluidContainer
+                    base = nil
+                    target = item:getComponent(bonus.component)
+                    if target then
+                        local compScript = scriptItem:getComponentScriptFor(bonus.component)
+                        base = compScript[bonus.getter] and compScript[bonus.getter](compScript)
                     end
-                else
-                    logger:debug("%s: no %s(), itemCategory=%s", item, bonus.setter, itemCategory)
-                    nCatCache[key] = true -- cache that this category doesn't have this bonus to avoid future warnings
+                end
+
+                if bonus.applyIfNull or (base and (base ~= 0 or bonus.applyIfZero)) then
+                    if target and target[bonus.setter] then
+                        base = base or 0 -- when applyIfNull is true, treat nil as 0 for bonus calculation
+                        local modified = bonus:func(base, t0)
+                        if modified and modified ~= base then
+                            target[bonus.setter](target, modified)
+                            zit.bonuses[key] = {
+                                base     = base,
+                                modified = modified,
+                            }
+                        end
+                    else
+                        logger:debug("%s: no %s(), itemCategory=%s", item, bonus.setter, itemCategory)
+                        nCatCache[key] = true -- cache that this category doesn't have this bonus to avoid future warnings
+                    end
                 end
             end
         end
     end
+
+    apply_bonuses(item, ZItemTiers.CatBonuses[itemCategory])
+    apply_bonuses(item, ZItemTiers.CatBonuses.All)
 
     return true
 end

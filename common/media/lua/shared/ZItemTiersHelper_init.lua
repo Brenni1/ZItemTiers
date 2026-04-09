@@ -7,8 +7,7 @@ Events.OnGameBoot.Add(function()
     ZItemTiersHelper.Reset();
 end)
 
-local item = instanceItem("Base.Belt2")
-zdk.patch_metatable(item, {
+zdk.augment_metatable( Clothing.class, {
     setDiscomfortModifier = function(self, value) ZItemTiersHelper.SetCustomAttribute(self, "DiscomfortModifier", value) end,
     setHearingModifier    = function(self, value) ZItemTiersHelper.SetCustomAttribute(self, "HearingModifier", value) end,
     setVisionModifier     = function(self, value) ZItemTiersHelper.SetCustomAttribute(self, "VisionModifier", value) end,
