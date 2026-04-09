@@ -81,6 +81,7 @@ local bonuses = {
         setter = "setConditionLowerChance",
         func   = function(base, t0) return base + t0 end,
     },
+    -- TODO: setCondition when setting ConditionMax
     ConditionMax              = function(base, t0) return base + t0 end,                                         -- 10 .. 12
                                                                                                                 
     ChanceToFall              = function(base, t0) return clamp(base - 5 * t0, 0, _) end,                        --  0 .. 80
