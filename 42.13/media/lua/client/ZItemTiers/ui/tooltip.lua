@@ -13,11 +13,11 @@ end
 -- Helper function to add tier information to a tooltip layout
 -- Shows tier for all items that have been assigned a tier
 -- This function is exposed to integration modules via ZItemTiers.addTierToLayout
-function ZItemTiers.addTierToLayout(item, layout)
+function ZItemTiers.addTierToLayout(item, layout, font)
     if not item or not layout then 
-        return 
+        return 0
     end
-    
+
     -- Get tier and bonuses from item
     local tier = ZItemTiers.GetItemTierKey(item)
     local bonuses = ZItemTiers.GetItemShownBonuses(item)
@@ -29,44 +29,32 @@ function ZItemTiers.addTierToLayout(item, layout)
     local tierItem = layout:addItem()
     tierItem:setLabel("Tier:",       color.r, color.g, color.b, 1.0)
     tierItem:setValue(tierData.name, color.r, color.g, color.b, 1.0)
+    local maxValueWidth = TextManager.instance:MeasureStringX(font, tierData.name)
     
     -- Add each bonus on its own row with empty label
     -- Each bonus row shows just the bonus text on the right (e.g., "+20% Damage")
     for bonusKey, bonus in pairs(bonuses) do
         local bonusName = ZItemTiers.GetBonusDisplayName(bonusKey)
+
+        local delta     = bonus.modified - bonus.base
+        local abs_delta = math.abs(delta)
+        local bonusText
+        
+        if abs_delta >= 0.01 then
+            bonusText = string.format("%+.2f", delta)
+        else
+            bonusText = string.format("%+.4f", delta)
+        end
+
         local bonusItem = layout:addItem()
-
-        local delta = bonus.modified - bonus.base
-        -- local bonusText = string.format("%+.2f %s", delta, bonusName)
-        local bonusText = string.format("%s %+.2f", bonusName, delta)
-
-        --bonusItem:setLabel(deltaText, color.r, color.g, color.b, 1.0)
+        bonusItem:setLabel(bonusName, color.r, color.g, color.b, 1.0)
         bonusItem:setValue(bonusText, color.r, color.g, color.b, 1.0)
+        maxValueWidth = math.max(maxValueWidth, TextManager.instance:MeasureStringX(font, bonusText))
+        --bonusItem:setValueRight(delta, true)
+        --bonusItem:setValueRightNoPlus(delta)
     end
+    return maxValueWidth
 end
-
--- Function to add tier information to a tooltip layout
---function ZItemTiers.AddTierToTooltip(item, tooltipUI, layout)
---    -- If layout is nil, try to get it from tooltipUI or create a new one
---    if not layout and tooltipUI then
---        if tooltipUI.beginLayout then
---            layout = tooltipUI:beginLayout()
---            -- layout:setMinLabelWidth(80)
---        end
---    end
---    
---    -- Can't add tier without a layout
---    if not layout then return end
---    
---    ZItemTiers.addTierToLayout(item, layout)
---end
-
----- Load reading speed hook (shared, but ensure it's loaded on client)
---require "ZItemTiers/reading_speed"
---
----- Load integration modules
---require "ZItemTiers/integrations/betterclothinginfo"
---require "ZItemTiers/integrations/contextmenu"
 
 --if ZItemTiers.BetterClothingInfoActive then return end
 -- BetterClothingInfo is not active - use ISToolTipInv:render hook
@@ -80,9 +68,14 @@ local function table_size(t)
 end
 
 local function createTierLayout(tooltipObj, item)
-    local layout = tooltipObj:beginLayout()
-    --layout:setMinLabelWidth(110)
-    ZItemTiers.addTierToLayout(item, layout)
+    local layout        = tooltipObj:beginLayout()
+    local font          = tooltipObj:getFont()
+    local maxValueWidth = ZItemTiers.addTierToLayout(item, layout, font)
+
+    local padX = Math.max(TextManager.instance:MeasureStringX(font, "W"), 8) -- as in ObjectTooltip.java
+    local minLabelWidth = tooltipObj:getWidth() - ZItemTiers.pad * 2 - maxValueWidth - padX
+    layout:setMinLabelWidth(minLabelWidth)
+
     return layout
 end
 
@@ -115,7 +108,10 @@ Events.OnGameStart.Add(function()
                 self:drawRect      (0, h0, w1, h1, self.backgroundColor.a, self.backgroundColor.r, self.backgroundColor.g, self.backgroundColor.b)
                 self:drawRectBorder(0, h0, w1, h1, self.borderColor.a,     self.borderColor.r,     self.borderColor.g,     self.borderColor.b)
 
+                local w0 = self.tooltip:getWidth()
                 layout:render(startX, startY, self.tooltip)
+                -- zdk.logger:debug("w0 = %d, w1 = %d, tw = %d", w0, w1, self.tooltip:getWidth())
+                -- self:drawRectBorder(startX, startY, self.tooltip:getWidth() - ZItemTiers.pad * 2, h1, 55, 30, 0, 30)
                 self.tooltip:endLayout(layout)
 
                 if self:getWidth() < w1 then
