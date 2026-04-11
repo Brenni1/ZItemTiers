@@ -82,7 +82,7 @@ local bonuses = {
         RunSpeedModifier          = { step =  0.05, clamp1 = true },
         VisionModifier            = { step =  0.05, max = 1 },
 
-        Insulation                = { step =  0.05, max = 1 },
+        -- Insulation                = { step =  0.05, max = 1 },
         WaterResistance           = { step =  0.05, max = 1,                        tipKey = "item_Waterresist" },
         Windresistance            = { step =  0.05, max = 1,                        tipKey = "item_Windresist" },
 
@@ -93,7 +93,7 @@ local bonuses = {
 
         StompPower                = { scale = 1.5 },
 
-        Thermoregulation          = { step = 5, applyIfNull = true, cond = function(_, t0, item) return t0 > 1 and item.getInsulation and item:getInsulation() > 0 end },
+        Thermoregulation          = { step = 10, applyIfNull = true, cond = function(_, t0, item) return t0 > 1 and item.getInsulation and item:getInsulation() > 0 end },
     },
 
     Container = {
