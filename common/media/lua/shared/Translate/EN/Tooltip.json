@@ -7,5 +7,6 @@
     Tooltip_ZIT_Bonus_MaxDamage: "Max damage",
     Tooltip_ZIT_Bonus_MaxRange: "Max range",
     Tooltip_ZIT_Bonus_TreeDamage: "Tree damage",
+    Tooltip_ZIT_Bonus_UnhappyChange: "Happiness",
     Tooltip_ZIT_Bonus_WeaponLength: "Weapon length"
 }

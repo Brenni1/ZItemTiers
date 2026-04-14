@@ -206,9 +206,9 @@ function ZItemTiers.ParseItemScript(scriptItem)
     return numeric_only
 end
 
-local _negativeCategoryCache = {}
+local _negativeClassCache = {}
 
-ZItemTiers.negativeCategoryCache = _negativeCategoryCache -- for debug
+ZItemTiers.negativeClassCache = _negativeClassCache -- for debug
 
 function ZItemTiers.ApplyBonuses(item, forceTier)
     if ZItemTiers.IsItemBlacklisted(item) then
@@ -246,27 +246,29 @@ function ZItemTiers.ApplyBonuses(item, forceTier)
 
     local scriptItem    = item:getScriptItem()
     local itemScriptTbl = ZItemTiers.ParseItemScript(scriptItem)
-    local itemCategory  = item:getCategory() or "?"
+    local itemClass     = getClassSimpleName(item)
 
-    _negativeCategoryCache[itemCategory] = _negativeCategoryCache[itemCategory] or {}
-    local nCatCache = _negativeCategoryCache[itemCategory]
+    _negativeClassCache[itemClass] = _negativeClassCache[itemClass] or {}
+    local nClsCache = _negativeClassCache[itemClass]
 
     local function apply_bonuses(item, bonuses)
         if not bonuses then return end
 
         for key, bonus in pairs(bonuses) do
-            if not nCatCache[key] then
-                local target  = item
-                local base    = itemScriptTbl[key:lower()] or (scriptItem[bonus.getter] and scriptItem[bonus.getter](scriptItem))
+            if not nClsCache[key] then
+                local target  = nil
+                local base    = nil
                 local applied = false
 
                 if bonus.component then -- e.g. FluidContainer
-                    base = nil
                     target = item:getComponent(bonus.component)
                     if target then
                         local compScript = scriptItem:getComponentScriptFor(bonus.component)
                         base = compScript[bonus.getter] and compScript[bonus.getter](compScript)
                     end
+                else
+                    target = item
+                    base   = itemScriptTbl[key:lower()] or (scriptItem[bonus.getter] and scriptItem[bonus.getter](scriptItem))
                 end
 
                 if bonus.applyIfNull or (base and (base ~= 0 or bonus.applyIfZero)) then
@@ -285,8 +287,8 @@ function ZItemTiers.ApplyBonuses(item, forceTier)
                             applied = true
                         end
                     else
-                        logger:debug("%s: no %s(), itemCategory=%s", item, bonus.setter, itemCategory)
-                        nCatCache[key] = true -- cache that this category doesn't have this bonus to avoid future warnings
+                        logger:debug("%s: no %s() for %s", item, bonus.setter, itemClass)
+                        nClsCache[key] = true -- cache that this class doesn't have this bonus to avoid future warnings
                     end
                 end
 
@@ -297,8 +299,11 @@ function ZItemTiers.ApplyBonuses(item, forceTier)
         end
     end
 
-    apply_bonuses(item, ZItemTiers.CatBonuses[itemCategory])
-    apply_bonuses(item, ZItemTiers.CatBonuses.All)
+    for className, bonuses in pairs(ZItemTiers.ClassBonuses) do
+        if instanceof(item, className) then
+            apply_bonuses(item, bonuses)
+        end
+    end
 
     return true
 end

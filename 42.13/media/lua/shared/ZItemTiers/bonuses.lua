@@ -49,7 +49,7 @@ local function HungerChange_afterSet(self, item, base, modified)
 end
 
 local bonuses = {
-    All = {
+    InventoryItem = {
         ConditionLowerChanceOneIn = { step = 1, altName = "ConditionLowerChance" },
         ConditionMax              = { step = 1, hide = true, afterSet = ConditionMax_afterSet },
 
@@ -58,7 +58,7 @@ local bonuses = {
 
         UseDelta                  = { scale = 0.5, hide = true, cond = function(base,t0,item) return base < 1.0 end },
 
-        FluidCapacity             = { scale = 2.0, component = (ComponentType and ComponentType.FluidContainer), altName = "Capacity", afterSet = FluidCapacity_afterSet },
+        FluidCapacity             = { scale = 2.0, component = (ComponentType and ComponentType.FluidContainer), altName = "Capacity", afterSet = FluidCapacity_afterSet, tipKey = "container_Capacity" },
 
         AlcoholPower              = { scale = 1.5 },
         BandagePower              = { scale = 1.5 },
@@ -69,7 +69,7 @@ local bonuses = {
         painReduction             = { scale = 2.0 },
         StressChange              = { step = -5, div = 100,                         tipKey = "literature_Stress_Reduction" },
         ThirstChange              = { step = -5, div = 100,                         tipKey = "food_Thirst" },
-        UnhappyChange             = { step = -5,                                    tipKey = "food_Unhappiness" },
+        UnhappyChange             = { step = -5 },
     },
 
     Clothing = {
@@ -96,11 +96,11 @@ local bonuses = {
         Thermoregulation          = { step = 10, applyIfNull = true, cond = function(base,t0,item) return t0 > ZItemTiers.T0_UNCOMMON and item.getInsulation and item:getInsulation() > 0 end },
     },
 
-    Container = {
+    InventoryContainer = {
         Capacity                  = { scale = 1.5 },
         ItemCapacity              = { scale = 1.5, hide = true },
-        MaxItemSize               = { scale = 2.0 },
-        WeightReduction           = { step = 5, max = 95 },
+        MaxItemSize               = { scale = 2.0,                tipKey = "container_Max_Item_Size" },
+        WeightReduction           = { step = 5, max = 95,         tipKey = "container_Weight_Reduction" },
     },
 
     HandWeapon = {
@@ -111,10 +111,10 @@ local bonuses = {
         JamGunChance              = { step = -0.25, min = 0 },
         MaxDamage                 = { affine = true },
         MaxRange                  = { affine = true },
-        MinimumSwingTime          = { neg_affine = true, hide = true },
-        PushBackMod               = { affine = 1.0, hide = true },
+        PushBackMod               = { affine = true, max = 1.0, hide = true },
         RecoilDelay               = { step = -1, min = 0, hide = true },
         ReloadTime                = { step = -2, min = 1, hide = true },
+        MinimumSwingTime          = { neg_affine = true, hide = true },
         SwingTime                 = { neg_affine = true, hide = true },
         TreeDamage                = { scale = 1.5 },
         WeaponLength              = { affine = true },
@@ -130,8 +130,8 @@ local bonuses = {
     },
                                                                                                                  
     Food = {
-        DaysFresh                 = { scale = 1.5 },
-        DaysTotallyRotten         = { scale = 1.5 },
+        DaysFresh                 = { scale = 1.5, altName = "OffAge", hide = true },
+        DaysTotallyRotten         = { scale = 1.5, altName = "OffAgeMax", hide = true },
     },
 }
 
@@ -148,11 +148,9 @@ local function bonus_func(self, base, t0, item)
         -- Interpolate smoothly from base (t0=0) to base*scale (t0=4).
         result = base * (1 + (self.scale - 1) * t0 / 4)
     elseif self.affine then
-        local maxValue = (self.affine == true) and nil or self.affine
-        result = affine_scale(base, t0, maxValue)
+        result = affine_scale(base, t0, self.max)
     elseif self.neg_affine then
-        local minValue = (self.neg_affine == true) and nil or self.neg_affine
-        result = neg_affine_scale(base, t0, minValue)
+        result = neg_affine_scale(base, t0, self.min)
     elseif self.func then
         result = self.func(base, t0, item)
         if not result then return end
@@ -182,14 +180,14 @@ local function expand(decl, key)
     return decl
 end
 
-ZItemTiers.Bonuses    = ZItemTiers.Bonuses or {}
-ZItemTiers.CatBonuses = ZItemTiers.CatBonuses or {}
+ZItemTiers.Bonuses      = ZItemTiers.Bonuses or {}
+ZItemTiers.ClassBonuses = ZItemTiers.ClassBonuses or {}
 
 for cat, cbonuses in pairs(bonuses) do
-    ZItemTiers.CatBonuses[cat] = ZItemTiers.CatBonuses[cat] or {}
+    ZItemTiers.ClassBonuses[cat] = ZItemTiers.ClassBonuses[cat] or {}
     for key, bonus in pairs(cbonuses) do
         local expanded = expand(bonus, key)
         ZItemTiers.Bonuses[key] = expanded
-        ZItemTiers.CatBonuses[cat][key] = expanded
+        ZItemTiers.ClassBonuses[cat][key] = expanded
     end
 end

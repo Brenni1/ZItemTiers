@@ -1,32 +1,28 @@
-local function forEachEquippedItem(player, fn)
+local function forEachEquippedLegendaryItem(player, fn)
     if not player or player:isDead() then return end
 
     local wornItems = player:getWornItems()
     for i = 0, wornItems:size() - 1 do
         local worn = wornItems:get(i)
         local item = worn:getItem()
-        if item then
+        if item and ZItemTiers.GetItemTierIndex0(item) == ZItemTiers.T0_LEGENDARY then
             fn(item)
         end
     end
 end
 
 local function applyLegendaryHappiness()
+    local delta = -ZItemTiers.Legendary_Happiness
+
     for i = 0, getNumActivePlayers() - 1 do
         local player = getSpecificPlayer(i)
-        local stats = player.getStats and player:getStats()
-        local unhappiness = stats and stats:get(CharacterStat.UNHAPPINESS) or 0
-        if unhappiness > 0 then
-            local changed = false
-            forEachEquippedItem(player, function(item)
-                local t0 = ZItemTiers.GetItemTierIndex0(item)
-                if t0 == ZItemTiers.T0_LEGENDARY then
-                    unhappiness = unhappiness - ZItemTiers.Legendary_Happiness
-                    changed = true
-                end
-            end)
-            if changed then
-                stats:set(CharacterStat.UNHAPPINESS, math.max(unhappiness, 0))
+        local stats = player and player.getStats and player:getStats()
+        if stats then
+            if stats:get(CharacterStat.UNHAPPINESS) > 0 or stats:get(CharacterStat.STRESS) > 0 then
+                forEachEquippedLegendaryItem(player, function(item)
+                    stats:add(CharacterStat.STRESS,      delta)
+                    stats:add(CharacterStat.UNHAPPINESS, delta)
+                end)
             end
         end
     end

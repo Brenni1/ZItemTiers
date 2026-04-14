@@ -8,7 +8,12 @@ Events.OnGameBoot.Add(function()
 end)
 
 zdk.augment_metatable( Clothing.class, {
-    setDiscomfortModifier = function(self, value) ZItemTiersHelper.SetCustomAttribute(self, "DiscomfortModifier", value) end,
-    setHearingModifier    = function(self, value) ZItemTiersHelper.SetCustomAttribute(self, "HearingModifier", value) end,
-    setVisionModifier     = function(self, value) ZItemTiersHelper.SetCustomAttribute(self, "VisionModifier", value) end,
+    setCorpseSicknessDefense = function(self, value) ZItemTiersHelper.SetCustomAttribute(self, "CorpseSicknessDefense", value) end,
+    setDiscomfortModifier    = function(self, value) ZItemTiersHelper.SetCustomAttribute(self, "DiscomfortModifier", value) end,
+    setHearingModifier       = function(self, value) ZItemTiersHelper.SetCustomAttribute(self, "HearingModifier", value) end,
+    setVisionModifier        = function(self, value) ZItemTiersHelper.SetCustomAttribute(self, "VisionModifier", value) end,
+})
+
+zdk.augment_metatable( InventoryContainer.class, {
+    setMaxItemSize           = function(self, value) ZItemTiersHelper.SetCustomAttribute(self, "MaxItemSize", value) end,
 })

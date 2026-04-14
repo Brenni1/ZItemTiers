@@ -26,5 +26,8 @@ ZItemTiers.NoTierItems = {
         ["Base.Splinters"]          = true,
         ["Base.UnusableWood"]       = true,
         ["Base.VHS_Retail"]         = true,
+    },
+    isHidden = {
+        [true]                      = true,
     }
 }

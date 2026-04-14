@@ -5,18 +5,11 @@ ZItemTiers.pad = ZItemTiers.pad or 15
 local TRANSFORM_VALUES = {
     Insulation      = function(x) return x*100 end,
     HearingModifier = function(x) return -x end,
+    UnhappyChange   = function(x) return -x end,
     VisionModifier  = function(x) return -x end,
     WaterResistance = function(x) return x*100 end,
     Windresistance  = function(x) return x*100 end,
 }
-
--- Helper function to check if item has tier
-local function hasTier(item)
-    if not item then return false end
-    
-    local zit = ZItemTiers.GetOrCreateZIT(item)
-    return zit.itemTier ~= nil and zit.itemTier ~= "Common"
-end
 
 local _i18n_cache = {}
 local function getBonusDisplayName(bonusType)
@@ -55,51 +48,64 @@ local function getBonusDisplayName(bonusType)
     return result
 end
 
--- Helper function to add tier information to a tooltip layout
--- Shows tier for all items that have been assigned a tier
--- This function is exposed to integration modules via ZItemTiers.addTierToLayout
-function ZItemTiers.addTierToLayout(item, layout, font)
-    if not item or not layout then 
-        return 0
-    end
-
-    -- Get tier and bonuses from item
+local function getItemTierAndBonuses(item)
+    local lines = {}
     local tier = ZItemTiers.GetItemTierKey(item)
     local bonuses = ZItemTiers.GetItemShownBonuses(item)
-    
+
     local tierData = ZItemTiers.Tiers[tier]
     local color = tierData.color
-    
-    -- tier row
-    local tierItem = layout:addItem()
-    tierItem:setLabel("Tier:",       color.r, color.g, color.b, 1.0)
-    tierItem:setValue(tierData.name, color.r, color.g, color.b, 1.0)
-    local maxValueWidth = TextManager.instance:MeasureStringX(font, tierData.name)
-    
-    -- Add each bonus on its own row with empty label
-    -- Each bonus row shows just the bonus text on the right (e.g., "+20% Damage")
-    for bonusKey, bonus in pairs(bonuses) do
-        local delta     = bonus.modified - bonus.base
-        local abs_delta = math.abs(delta)
 
-        local bonusName = getBonusDisplayName(bonusKey)
+    local rgba = { color.r, color.g, color.b, 1.0 }
+    table.insert(lines, {
+        name  = "Tier",
+        text  = tierData.name,
+        color = rgba
+    })
+
+    for bonusKey, bonus in pairs(bonuses) do
+        local base     = bonus.base
+        local modified = bonus.modified
+
+        local divider  = zdk.dig(ZItemTiers.Bonuses, bonusKey, "div")
+        if divider then modified = modified * divider end
+
+        local delta = modified - base
+
         if TRANSFORM_VALUES[bonusKey] then
             delta = TRANSFORM_VALUES[bonusKey](delta)
         end
 
-        local bonusText = abs_delta >= 0.01 and string.format("%+.2f", delta) or string.format("%+.4f", delta)
-        local bonusItem = layout:addItem()
-        bonusItem:setLabel(bonusName, color.r, color.g, color.b, 1.0)
-        bonusItem:setValue(bonusText, color.r, color.g, color.b, 1.0)
-        maxValueWidth = math.max(maxValueWidth, TextManager.instance:MeasureStringX(font, bonusText))
-        --bonusItem:setValueRight(delta, true)
-        --bonusItem:setValueRightNoPlus(delta)
+        local decimals  = math.abs(delta) >= 0.01 and 2 or 4
+        local text      = string.format("%+." .. decimals .. "f", delta)
+        table.insert(lines, {
+            name     = getBonusDisplayName(bonusKey),
+            delta    = delta,
+            text     = text,
+            decimals = decimals,
+            highGood = delta > 0,
+            color    = rgba,
+        })
+    end
+    return lines
+end
+
+-- Helper function to add tier information to a tooltip layout
+-- Shows tier for all items that have been assigned a tier
+-- This function is exposed to integration modules via ZItemTiers.addTierToLayout
+function ZItemTiers.addTierToLayout(item, layout, font)
+    local maxValueWidth = 0
+    if item and layout then
+        local lines = getItemTierAndBonuses(item)
+        for _, line in ipairs(lines) do
+            local bonusItem = layout:addItem()
+            bonusItem:setLabel(line.name, unpack(line.color))
+            bonusItem:setValue(line.text, unpack(line.color))
+            maxValueWidth = math.max(maxValueWidth, TextManager.instance:MeasureStringX(font, line.text))
+        end
     end
     return maxValueWidth
 end
-
---if ZItemTiers.BetterClothingInfoActive then return end
--- BetterClothingInfo is not active - use ISToolTipInv:render hook
 
 local function table_size(t)
     local count = 0
@@ -121,6 +127,82 @@ local function createTierLayout(tooltipObj, item)
     return layout
 end
 
+local function setupTooltips()
+    local logger = ZItemTiers.logger:withPrefix("setupTooltips(): ")
+
+    if TooltipLib and TooltipLib.registerProvider then
+        logger:info("TooltipLib detected")
+        TooltipLib.registerProvider({
+            id = "ZItemTiers",
+            callback = function(ctx)
+                for _, l in ipairs(getItemTierAndBonuses(ctx.item)) do
+                    if l.delta then
+                        ctx:addFloat(l.name, l.delta, l.decimals, l.highGood, l.color, l.color)
+                    else
+                        ctx:addKeyValue(l.name, l.text, l.color, l.color)
+                    end
+                end
+            end
+        })
+        return
+    end
+
+    local tooltip_render_fname = getFilenameOfClosure and getFilenameOfClosure(ISToolTipInv.render) or ""
+    logger:info("ISToolTipInv.render is owned by %s", tooltip_render_fname)
+
+    if tooltip_render_fname:contains("/Starlit/client/ui/InventoryUI.lua") then
+        logger:info("Starlit detected")
+        local InventoryUI = require("Starlit/client/ui/InventoryUI")
+        InventoryUI.onFillItemTooltip:addListener(function(tooltip, layout, item)
+            for _, l in ipairs(getItemTierAndBonuses(item)) do
+                InventoryUI.addTooltipKeyValue(layout, l.name, l.text, l.color, l.color)
+            end
+        end)
+        return
+    end
+
+    -- no BCI or BCI non-clothing path
+    zdk.patch_all_metatables("DoTooltip", {
+        DoTooltip = function(orig, self, ...)
+            while instanceof(self, "InventoryItem") and select('#', ...) == 1 do
+                local tooltip = select(1, ...) -- zombie.ui.ObjectTooltip
+                if not tooltip or not tooltip.beginLayout then break end
+
+                orig(self, ...)
+
+                local layout    = createTierLayout(tooltip, self)
+                local charWidth = TextManager.instance:MeasureStringX(tooltip:getFont(), "0") -- as in ObjectTooltip.checkFont
+                local padLeft   = charWidth
+                local padBottom = charWidth/2
+                local h0 = tooltip:getHeight()
+                local h1 = layout:render(padLeft, h0-padBottom, tooltip);
+                tooltip:setHeight(h1 + padBottom)
+                return
+            end
+            return orig(self, ...)
+        end
+    })
+
+    if tooltip_render_fname:contains("/3604080281/mods/BetterClothingInfo/") and _G.BCI_TooltipInv_Active then
+        logger:info("BetterClothingInfo detected")
+
+        -- BCI clothing path
+        zdk.hook({
+            _G = {
+                DoTooltipClothing = function(orig, objTooltip, item, layout, ...)
+                    local result = orig(objTooltip, item, layout, ...)
+                    ZItemTiers.addTierToLayout(item, layout, objTooltip:getFont())
+                    return result
+                end
+            }
+        })
+        return
+    end
+end
+
+Events.OnGameStart.Add(setupTooltips)
+
+--[[
 -- try to hook the last override of ISToolTipInv
 Events.OnGameStart.Add(function()
     zdk.hook({
@@ -166,3 +248,4 @@ Events.OnGameStart.Add(function()
         }
     })
 end)
+]]
