@@ -56,7 +56,7 @@ local bonuses = {
         ActualWeight              = { scale = 0.5, hide = true },
         Weight                    = { scale = 0.5 },
 
-        UseDelta                  = { scale = 0.5, hide = true, cond = function(base) return base < 1.0 end },
+        UseDelta                  = { scale = 0.5, hide = true, cond = function(base,t0,item) return base < 1.0 end },
 
         FluidCapacity             = { scale = 2.0, component = (ComponentType and ComponentType.FluidContainer), altName = "Capacity", afterSet = FluidCapacity_afterSet },
 
@@ -93,7 +93,7 @@ local bonuses = {
 
         StompPower                = { scale = 1.5 },
 
-        Thermoregulation          = { step = 10, applyIfNull = true, cond = function(_, t0, item) return t0 > 1 and item.getInsulation and item:getInsulation() > 0 end },
+        Thermoregulation          = { step = 10, applyIfNull = true, cond = function(base,t0,item) return t0 > ZItemTiers.T0_UNCOMMON and item.getInsulation and item:getInsulation() > 0 end },
     },
 
     Container = {
@@ -153,6 +153,9 @@ local function bonus_func(self, base, t0, item)
     elseif self.neg_affine then
         local minValue = (self.neg_affine == true) and nil or self.neg_affine
         result = neg_affine_scale(base, t0, minValue)
+    elseif self.func then
+        result = self.func(base, t0, item)
+        if not result then return end
     else
         logger:error("Invalid bonus declaration: %s", self)
     end

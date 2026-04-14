@@ -15,6 +15,9 @@ function ZItemTiers.GetItemShownBonuses(item)
             result[k] = v
         end
     end
+    if ZItemTiers.Legendary_Happiness and instanceof(item, "Clothing") and ZItemTiers.GetItemTierKey(item) == "Legendary" and not result.UnhappyChange then
+        result.UnhappyChange = { base = 0, modified = -ZItemTiers.Legendary_Happiness }
+    end
     return result
 end
 

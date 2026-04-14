@@ -1,6 +1,6 @@
 ZItemTiers = ZItemTiers or {}
 
-ZItemTiers.logger = ZItemTiers.logger or zdk.Logger.new("ZItemTiers", zdk.Logger.DEBUG)
+ZItemTiers.logger = zdk.Logger.new("ZItemTiers", zdk.Logger.DEBUG)
 local logger = ZItemTiers.logger
 
 -- Initialize global session ID for bonus tracking (initialized once per game session)
@@ -20,40 +20,64 @@ ZItemTiers.CommonIdx = 1
 -- Tier metadata: name, color, and index
 ZItemTiers.Tiers = {
     Common = {
+        t0    = 0,
         index = ZItemTiers.CommonIdx,
-        name = "Common",
+        name  = "Common",
         color = {r=1.0, g=1.0, b=1.0},  -- White
     },
     Uncommon = {
+        t0    = 1,
         index = ZItemTiers.CommonIdx + 1,
-        name = "Uncommon",
+        name  = "Uncommon",
         color = {r=0.2, g=1.0, b=0.2},  -- Green
     },
     Rare = {
+        t0    = 2,
         index = ZItemTiers.CommonIdx + 2,
-        name = "Rare",
+        name  = "Rare",
         color = {r=0.2, g=0.4, b=1.0},  -- Blue
     },
     Epic = {
+        t0    = 3,
         index = ZItemTiers.CommonIdx + 3,
-        name = "Epic",
+        name  = "Epic",
         color = {r=0.8, g=0.2, b=1.0},  -- Purple
     },
     Legendary = {
+        t0    = 4,
         index = ZItemTiers.CommonIdx + 4,
-        name = "Legendary",
+        name  = "Legendary",
         color = {r=1.0, g=0.8, b=0.0},  -- Gold/Yellow
     },
 }
 
-local TIER_NAMES = { "Common", "Uncommon", "Rare", "Epic", "Legendary" }
+ZItemTiers.T0_COMMON    = 0
+ZItemTiers.T0_UNCOMMON  = 1
+ZItemTiers.T0_RARE      = 2
+ZItemTiers.T0_EPIC      = 3
+ZItemTiers.T0_LEGENDARY = 4
 
-function ZItemTiers.GetTierNameFromT0(t0)
-    return TIER_NAMES[t0 + 1]
+ZItemTiers.MIN_T0 = 0
+ZItemTiers.MAX_T0 = 4
+
+local T0_NAMES = {
+    [0] = "Common",
+    [1] = "Uncommon",
+    [2] = "Rare",
+    [3] = "Epic",
+    [4] = "Legendary",
+}
+
+ZItemTiers.Legendary_Happiness = 1 -- each Legendary tier item reduces unhappiness by this amount
+
+function ZItemTiers.GetTierColor(t0)
+    local tierName = T0_NAMES[t0]
+    local tierData = ZItemTiers.Tiers[tierName]
+    return tierData and tierData.color or {r=1.0, g=1.0, b=1.0} -- default to white
 end
 
 function ZItemTiers.GetT0FromTierName(tierName)
-    return ZItemTiers.Tiers[tierName].index - 1
+    return ZItemTiers.Tiers[tierName].t0
 end
 
 function ZItemTiers.GetOrCreateZIT(item)
@@ -90,25 +114,22 @@ function ZItemTiers.GetZIT(item)
     return modData.ZIT
 end
 
--- Roll a random tier based on tier probabilities
-function ZItemTiers.RollTier()
+-- Roll a random tier based on tier probabilities, return tier 0-based index
+function ZItemTiers.RollT0()
     local roll = ZombRandFloat(0.0, 1.0)
     local cumulative = 0
     
-    for i = 1, #ZItemTiers.TierProbabilities do
-        cumulative = cumulative + ZItemTiers.TierProbabilities[i]
+    for t0 = 0, #ZItemTiers.TierProbabilities-1 do
+        cumulative = cumulative + ZItemTiers.TierProbabilities[t0+1]
         if roll <= cumulative then
-            -- Find tier name by index
-            for tierName, tierData in pairs(ZItemTiers.Tiers) do
-                if tierData.index == i then
-                    return tierName
-                end
-            end
+            return t0
         end
     end
-    
-    -- Fallback to Common if something goes wrong
-    return "Common"
+end
+
+-- Roll a random tier based on tier probabilities, return tier name
+function ZItemTiers.RollTier()
+    return T0_NAMES[ZItemTiers.RollT0()]
 end
 
 -- Check if an item is blacklisted and should never receive tier
@@ -124,21 +145,6 @@ function ZItemTiers.IsItemBlacklisted(item)
         end
     end
 
-    -- VHS tapes: blacklist by pattern (any fullType containing "VHS")
-    if fullType and string.find(fullType, "VHS") then
-        return true
-    end
-
-    -- Check if item is a Map type (all maps should be blacklisted)
-    local itemType = item:getType()
-    if itemType then
-        local isMap = (ItemType and ItemType.MAP and itemType == ItemType.MAP) or
-            (itemType.toString and itemType:toString() == "Map")
-        if isMap then
-            return true
-        end
-    end
-    
     return false
 end
 
@@ -323,6 +329,10 @@ function ZItemTiers.GetItemTierIndex0(item)
     return idx1 - 1
 end
 
+function ZItemTiers.GetItemT0(item)
+    return ZItemTiers.GetItemTierIndex0(item)
+end
+
 function ZItemTiers.SetItemTier(item, tierName)
     local zit = ZItemTiers.GetOrCreateZIT(item)
     zit.itemTier = tierName
@@ -338,6 +348,16 @@ function ZItemTiers.GetItemTierKey(item)
     return (zit and zit.itemTier) or "Common"
 end
 
+local function toList(src)
+    if type(src) ~= "table" and src.toArray then
+        src = src:toArray()
+    end
+    if type(src) ~= "table" then
+        logger:error("Invalid src parameter: expected ArrayList or table, got %s", type(src))
+        return {}
+    end
+    return src
+end
 
 -- Calculate output tier based on ingredient tiers (Factorio-style)
 -- Returns the calculated tier name
@@ -355,26 +375,21 @@ end
 --    - Level 0: 50% chance to be 1 tier lower
 --    - Level 1: Keep calculated tier (no change)
 --    - Level > 1: Small chance (5% per level above 1) to be 1 tier higher
-function ZItemTiers.CalculateCraftingTier(tbl)
-    local logger = logger:withPrefix("CalculateCraftingTier() ")
+function ZItemTiers.CalculateCraftingT0(tbl)
+    local logger = logger:withPrefix("CalculateCraftingT0() ")
+    local result = ZItemTiers.RollT0()
 
-    local src    = tbl.src
     local perk   = tbl.perk
     local player = tbl.player
     local recipe = tbl.recipe
-    local tools  = tbl.tools  -- TODO: use
+    local src    = toList(tbl.src)
+    local tools  = toList(tbl.tools)
 
-    if type(src) ~= "table" and src.toArray then
-        src = src:toArray()
-    end
-    if type(src) ~= "table" then
-        logger:error("Invalid src parameter: expected ArrayList or table, got %s", type(src))
-        return ZItemTiers.RollTier()
-    end
+    logger:debug("tools = %s", tools)
 
     if table.isempty(src) then
-        -- No ingredients, use normal spawn probability
-        return ZItemTiers.RollTier()
+        logger:debug("No ingredients, use normal spawn probability")
+        return result
     end
 
     -- Get crafting skill level
@@ -384,11 +399,7 @@ function ZItemTiers.CalculateCraftingTier(tbl)
     end
     logger:debug("detected skill level: %s", skillLevel)
 
-    -- Fallback: if recipe method failed, try to manually check common crafting skills
-    if not skillLevel or skillLevel == 0 then
-        -- No skill level, use normal spawn probability
-        return ZItemTiers.RollTier()
-    end
+    skillLevel = skillLevel or 1
     
     -- Collect tiers from all ingredients
     local tierCounts = {}
@@ -396,65 +407,42 @@ function ZItemTiers.CalculateCraftingTier(tbl)
     
     for _, ingredient in ipairs(src) do
         if ingredient then
-            local tier = ZItemTiers.GetItemTierKey(ingredient)
-            if tier then
-                tierCounts[tier] = (tierCounts[tier] or 0) + 1
-                totalIngredients = totalIngredients + 1
-            end
+            local t0 = ZItemTiers.GetItemT0(ingredient)
+            tierCounts[t0] = (tierCounts[t0] or 0) + 1
+            totalIngredients = totalIngredients + 1
         end
     end
+    logger:debug("tierCounts = %s, totalIngredients = %d", tierCounts, totalIngredients)
     
     if totalIngredients == 0 then
-        -- No ingredients with tier, use normal spawn probability
-        return ZItemTiers.RollTier()
-    end
-    
-    -- Find the minimum tier index (highest tier) among all ingredients
-    -- This is the "floor" - output will be at least this tier
-    local minTierIndex = nil
-    for tierName, count in pairs(tierCounts) do
-        local tierData = ZItemTiers.Tiers[tierName]
-        if tierData then
-            if minTierIndex == nil or tierData.index > minTierIndex then
-                minTierIndex = tierData.index
-            end
-        end
-    end
-    
-    if not minTierIndex then
-        return "Common"
+        return result
     end
     
     -- Calculate weighted average of ingredient tiers based on count
     local weightedSum = 0
-    for tierName, count in pairs(tierCounts) do
-        local tierData = ZItemTiers.Tiers[tierName]
-        if tierData then
-            weightedSum = weightedSum + (tierData.index * count)
-        end
+    for t0, count in pairs(tierCounts) do
+        weightedSum = weightedSum + (t0+1) * count
     end
-    local averageIndex = weightedSum / totalIngredients
+    local avgT1 = weightedSum / totalIngredients
+    logger:debug("avgT1 = %d / %d = %.2f", weightedSum, totalIngredients, avgT1)
     
-    -- Round to nearest integer
-    local targetIndex = math.floor(averageIndex + 0.5)
-    
-    -- Ensure output is at least the minimum tier tier (Factorio rule: all Epic -> at least Epic)
-    targetIndex = math.max(minTierIndex, targetIndex)
-    
-    -- Debug: log calculation before skill modifiers
-    logger:debug("targetIndex=%d (skillLevel=%d)", targetIndex, skillLevel)
+    local resT1 = math.floor(avgT1)
+    if resT1 > 1 then
+        result = result + resT1 - 1
+        logger:debug("resT1 %d => result %d", resT1, result)
+    end
     
     -- Apply skill level modifiers
     if skillLevel == 0 then
         -- Skill level 0: 50% chance to be 1 tier lower
         local roll = ZombRandFloat(0.0, 1.0)
         if roll < 0.5 then
-            -- Reduce by 1 tier (but not below Common/1)
-            local oldIndex = targetIndex
-            targetIndex = math.max(1, targetIndex - 1)
-            logger:debug("skill level 0 reduced tier from %d to %d (roll=%.2f)", oldIndex, targetIndex, roll)
+            -- Reduce by 1 tier
+            local oldResult = result
+            result = result - 1
+            logger:debug("skill level 0 reduced tier from %d to %d (roll=%.2f)", oldResult, result, roll)
         else
-            logger:debug("skill level 0 kept tier at %d (roll=%.2f)", targetIndex, roll)
+            logger:debug("skill level 0 kept tier at %d (roll=%.2f)", result, roll)
         end
     elseif skillLevel > 1 then
         -- Skill level > 1: Small chance to be 1 tier higher
@@ -463,44 +451,56 @@ function ZItemTiers.CalculateCraftingTier(tbl)
         local roll = ZombRandFloat(0.0, 1.0)
         
         if roll < upgradeChance then
-            -- Upgrade by 1 tier (up to Legendary/5)
-            local oldIndex = targetIndex
-            targetIndex = math.min(5, targetIndex + 1)
-            logger:debug("skill level %d upgraded tier from %d to %d (roll=%.2f, chance=%.3f)", skillLevel, oldIndex, targetIndex, roll, upgradeChance)
+            -- Upgrade by 1 tier
+            local oldResult = result
+            result = result + 1
+            logger:debug("skill level %d upgraded tier from %d to %d (roll=%.2f, chance=%.3f)", skillLevel, oldResult, result, roll, upgradeChance)
         end
     else
-        -- Skill level 1: No change (keep calculated tier)
-        logger:debug("skill level 1 kept tier at %d (no change)", targetIndex)
+        -- Skill level 1: No change
+        logger:debug("skill level 1 kept tier at %d (no change)", result)
     end
-    
-    -- Clamp to valid tier range (1-5)
-    targetIndex = math.max(1, math.min(5, targetIndex))
-    
-    -- Find tier name by index
-    for tierName, tierData in pairs(ZItemTiers.Tiers) do
-        if tierData.index == targetIndex then
-            return tierName
+
+    -- apply tool level, if any
+    local maxToolLevel = 0
+    if tools then
+        for _, tool in ipairs(tools) do
+            local t0 = ZItemTiers.GetItemTierIndex0(tool)
+            logger:debug("tool=%s, level=%d", tool, t0)
+            if t0 > maxToolLevel then
+                maxToolLevel = t0
+            end
+        end
+    end
+    if maxToolLevel > 0 then
+        local upgradeChance = maxToolLevel * 0.05
+        local roll = ZombRandFloat(0.0, 1.0)
+
+        if roll < upgradeChance then
+            -- Upgrade by 1 tier
+            local oldResult = result
+            result = result + 1
+            logger:debug("tool level %d upgraded tier from %d to %d (roll=%.2f, chance=%.3f)", skillLevel, oldResult, result, roll, upgradeChance)
         end
     end
     
-    -- Fallback: return the minimum tier
-    for tierName, tierData in pairs(ZItemTiers.Tiers) do
-        if tierData.index == minTierIndex then
-            return tierName
-        end
-    end
-    
-    return "Common"
+    return zdk.clamp(result, ZItemTiers.MIN_T0, ZItemTiers.MAX_T0)
+end
+
+function ZItemTiers.CalculateCraftingTier(...)
+    return T0_NAMES[ZItemTiers.CalculateCraftingT0(...)]
 end
 
 -- capture instanceItem() calls while calling origFun() and apply crafting tier bonuses to crafted items based on src ingredients
--- see CalculateCraftingTier() for tbl parameters description
+-- see CalculateCraftingT0() for tbl parameters description
 function ZItemTiers.AutoTierCraftedItems(tbl, origFun, ...)
     return zdk.scoped_hook({
         _G = {
             instanceItem = function(orig, ...)
                 local item = orig(...)
                 local tier = ZItemTiers.CalculateCraftingTier(tbl)
+                logger:debug("AutoTierCraftedItems: assigned tier %s to %s", tier, item)
+
                 if tier then
                     ZItemTiers.ApplyBonuses(item, tier)
                 end

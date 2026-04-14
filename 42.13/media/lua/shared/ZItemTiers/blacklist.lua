@@ -4,7 +4,8 @@ ZItemTiers = ZItemTiers or {}
 -- Items in this list will never receive tier bonuses
 ZItemTiers.NoTierItems = {
     getDisplayCategory = {
-        ["Ammo"] = true,
+        ["Ammo"]                    = true,
+        ["Cartography"]             = true, -- all maps
     },
     getFullType = {
         ["Base.Brochure"]           = true,
@@ -12,6 +13,7 @@ ZItemTiers.NoTierItems = {
         ["Base.CombinationPadlock"] = true,
         ["Base.Flier"]              = true,
         ["Base.GolfTee"]            = true,
+        ["Base.HandmadeMap"]        = true,
         ["Base.IDcard"]             = true,
         ["Base.IDcard_Female"]      = true,
         ["Base.IDcard_Male"]        = true,

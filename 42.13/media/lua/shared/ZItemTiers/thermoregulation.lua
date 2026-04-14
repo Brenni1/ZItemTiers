@@ -59,7 +59,7 @@ local function applyThermoregulatedInsulation(player, clothing, thermoreg)
     if coveredCount == 0 then return false end
 
     local avgSkinTemp = totalSkinTemp / coveredCount
-    logger:debug("Average skin temp for '%s': %.2fC (thermoreg=%.2f)", clothing, avgSkinTemp, thermoreg)
+    -- logger:debug("Average skin temp for '%s': %.2fC (thermoreg=%.2f)", clothing, avgSkinTemp, thermoreg)
 
     local baseInsulation = clothing:getScriptItem():getInsulation()
     local range = thermoreg * THERMO_RANGE_SCALE
@@ -90,7 +90,7 @@ local function applyThermoregulatedInsulation(player, clothing, thermoreg)
     return true
 end
 
-local function forEachEquippedClothing(player, fn)
+local function forEachEquippedItem(player, fn)
     if not player or player:isDead() then return end
 
     local wornItems = player:getWornItems()
@@ -103,17 +103,17 @@ local function forEachEquippedClothing(player, fn)
     end
 end
 
-local function onEveryOneMinute()
+local function applyThermoregulation()
     for i = 0, getNumActivePlayers() - 1 do
         local player = getSpecificPlayer(i)
-        forEachEquippedClothing(player, function(clothing)
-            local thermoreg = getClothingThermoregulation(clothing)
+        forEachEquippedItem(player, function(item)
+            local thermoreg = getClothingThermoregulation(item)
             if thermoreg > 0 then
-                applySelfDrying(clothing, thermoreg)
-                applyThermoregulatedInsulation(player, clothing, thermoreg)
+                applySelfDrying(item, thermoreg)
+                applyThermoregulatedInsulation(player, item, thermoreg)
             end
         end)
     end
 end
 
-Events.EveryOneMinute.Add(onEveryOneMinute)
+Events.EveryOneMinute.Add(applyThermoregulation)
