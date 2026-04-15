@@ -68,6 +68,9 @@ Crafted output tier follows your [b]ingredient tiers[/b] in a [b]Factorio-style[
 [b]Q: MP support?[/b]
 [b]A:[/b] Not tested.
 
+[b]Q: Load order?[/b]
+[b]A:[/b] Try to place it last in the list.
+
 [h2]Links[/h2]
 [url=https://github.com/zed-0xff/ZItemTiers]GitHub[/url]
 [url=https://ko-fi.com/zed_0xff][img]https://i.imgur.com/Utx6OIH.png[/img][/url]
