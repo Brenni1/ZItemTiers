@@ -1,29 +1,73 @@
 [h1]Zed's Item Tiers[/h1]
-Tired of the same loot everywhere and losing the thrill of exploration? [b]Zed's Item Tiers[/b] adds a [b]probability-based tier system[/b]: any item can spawn as Common, Uncommon, Rare, Epic, or Legendary. Higher tiers grant real stat bonuses—lighter bags, deadlier weapons, tougher gear—so that next find might actually matter.
 
-[h2]Tiers[/h2]
+Tired of the same loot everywhere and losing the thrill of exploration? [b]Zed's Item Tiers[/b] adds a [b]probability-based rarity system[/b] to Project Zomboid: almost any item can roll as [b]Common, Uncommon, Rare, Epic, or Legendary[/b] when it enters the world. Higher tiers are genuinely stronger—lighter bags, deadlier weapons, tougher clothes—so scavenging and crafting stay interesting instead of flat. [b]New highlight:[/b] tiered clothing now has active [b]Thermoregulation[/b] behavior, not just static stats.
+
+[h2]How it works[/h2]
 [list]
-[*][b]Common[/b] 80% — White (no bonuses)
-[*][b]Uncommon[/b] 16% — Green
-[*][b]Rare[/b] 3.2% — Blue
-[*][b]Epic[/b] 0.64% — Purple
-[*][b]Legendary[/b] 0.16% — Gold
+[*]Tiers are assigned when items spawn or appear in containers; [b]Common[/b] items behave like vanilla (no tier bonuses).
+[*]Each tier has a [b]default spawn weight[/b] (see Tiers below). You can tune probabilities in the mod’s Lua if you want a stingier or more generous economy.
+[*][b]Tooltips[/b] show the item’s tier and the bonuses that apply to that item type, so you can compare loot at a glance.
+[/list]
+
+[h2]Tiers (default chances)[/h2]
+[list]
+[*][b]Common[/b] — 80% — White (no bonuses)
+[*][b]Uncommon[/b] — 16% — Green
+[*][b]Rare[/b] — 3.2% — Blue
+[*][b]Epic[/b] — 0.64% — Purple
+[*][b]Legendary[/b] — 0.16% — Gold
+[/list]
+
+[h2]New: Thermoregulation (clothing)</h2>
+[b]Thermoregulation is now an active mechanic.[/b] On insulated clothing, tier bonuses dynamically adapt insulation while worn:
+[list]
+[*]All clothing from [b]Rare tier and above[/b] gets Thermoregulation.
+[*]If covered body parts run [b]hot[/b], insulation shifts [b]down[/b] (cooling support).
+[*]If covered body parts run [b]cold[/b], insulation shifts [b]up[/b] (warming support).
+[*]The shift range is tied to the item's [b]Thermoregulation bonus[/b], so higher-tier clothing adapts more.
+[*]Thermoregulated clothing also [b]self-dries faster[/b] when wet.
 [/list]
 
 [h2]Bonuses by item type[/h2]
-Higher tiers improve items that support the stat: [b]weapons[/b] (damage, weight), [b]clothing[/b] (defense, run speed, vision/hearing), [b]containers[/b] (capacity, encumbrance), [b]drainables[/b] (capacity), [b]literature[/b] (mood, reading speed), [b]flashlights[/b] (battery), [b]food[/b] (hunger reduction).
+Bonuses only apply where the item actually supports the stat. [b]Thermoregulation[/b] is one of the headline systems now. In practice:
 
-[h2]Crafting[/h2]
-Crafted output tier is based on [b]ingredient tiers[/b] (Factorio-style): output is at least the highest tier among ingredients; mixed tiers use a weighted result; crafting skill can nudge the result.
-
-[h2]Optional: ZombieBuddy[/h2]
-[url=https://steamcommunity.com/sharedfiles/filedetails/?id=3619862853][b]ZombieBuddy[/b][/url] enables Java-based bonuses (e.g. weapon weight) that can't be appliad in pure Lua. But you can play without it.
-
-[h2]Compatible mods (optional)[/h2]
 [list]
-[*][url=https://steamcommunity.com/sharedfiles/filedetails/?id=3437629766][b]CleanUI[/b][/url] — load ZItemTiers after this.
-[*][url=https://steamcommunity.com/sharedfiles/filedetails/?id=3604080281][b]Better Clothing Info[/b][/url] — shows tier bonuses in clothing comparison UI.
+[*][b]Weapons:[/b] damage, crit, handling-style stats where applicable; [b]weapon weight[/b] needs the optional Java path (see ZombieBuddy).
+[*][b]Clothing:[/b] bite/scratch (and related) defense, run speed, vision and hearing modifiers where relevant, plus [b]thermoregulation[/b] on insulated gear: while worn, insulation nudges toward what your covered body parts need (hotter → less insulation, colder → more), and tiered clothes with thermoregulation [b]dry faster[/b] when wet.
+[*][b]Containers:[/b] capacity, encumbrance reduction, max item size where supported.
+[*][b]Drainables:[/b] fluid capacity where the item uses a fluid container.
+[*][b]Literature:[/b] mood-related stats and reading speed where the book supports them.
+[*][b]Flashlights / battery gear:[/b] lower drain where hooked.
+[*][b]Food:[/b] improved hunger reduction on higher tiers where the item is food.
+[*][b]Legendary style bonus:[/b] all [b]worn Legendary[/b] items provide a small mood/stress boost, so yes, your cool bellybutton piercing finally has gameplay value.
 [/list]
 
-[hr][/hr]
-[url=https://github.com/zed-0xff]GitHub[/url] · [url=https://ko-fi.com/zed_0xff][img]https://i.imgur.com/Utx6OIH.png[/img][/url] · Author: zed_0xff
+[h2]Crafting[/h2]
+Crafted output tier follows your [b]ingredient tiers[/b] in a [b]Factorio-style[/b] way: the result is never worse than the “floor” set by your best ingredient tier, mixed inputs influence the roll, and [b]relevant crafting skill[/b] can slightly improve (or worsen) the outcome. Recycling good components into better gear is part of the loop.
+
+[h2]Optional: ZombieBuddy[/h2]
+[url=https://steamcommunity.com/sharedfiles/filedetails/?id=3619862853][b]ZombieBuddy[/b][/url] enables [b]Java-side[/b] bonuses that pure Lua cannot apply cleanly—most notably [b]weapon weight[/b]. The mod is fully playable without it; you just skip those Java-only perks.
+
+[h2]Compatible mods[/h2]
+[list]
+[*][url=https://steamcommunity.com/sharedfiles/filedetails/?id=3604080281]Better Clothing Info[/url]
+[*][url=https://steamcommunity.com/sharedfiles/filedetails/?id=3437629766]CleanUI[/url]
+[*][url=https://steamcommunity.com/sharedfiles/filedetails/?id=3671173479]Glass Cutter[/url]
+[*][url=https://steamcommunity.com/sharedfiles/filedetails/?id=3694097672]TooltipLib[/url]
+[*][url=https://steamcommunity.com/sharedfiles/filedetails/?id=3659195975]Science, Bitch![/url]
+[*][url=https://steamcommunity.com/sharedfiles/filedetails/?id=3555588616]Sewing Workbranch[/url]
+[/list]
+
+[h2]FAQ[/h2]
+[b]Q: Is it safe to add/remove on existing saves?[/b]
+[b]A:[/b] Yes.
+
+[b]Q: What game versions were tested?[/b]
+[b]A:[/b] 42.13 - 42.16.
+
+[b]Q: MP support?[/b]
+[b]A:[/b] Not tested.
+
+[h2]Links[/h2]
+[url=https://github.com/zed-0xff/ZItemTiers]GitHub[/url]
+[url=https://ko-fi.com/zed_0xff][img]https://i.imgur.com/Utx6OIH.png[/img][/url]
