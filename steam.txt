@@ -18,7 +18,7 @@ Tired of the same loot everywhere and losing the thrill of exploration? [b]Zed's
 [*][b]Legendary[/b] — 0.16% — Gold
 [/list]
 
-[h2]New: Thermoregulation (clothing)</h2>
+[h2]New: Thermoregulation (clothing)[/h2]
 [b]Thermoregulation is now an active mechanic.[/b] On insulated clothing, tier bonuses dynamically adapt insulation while worn:
 [list]
 [*]All clothing from [b]Rare tier and above[/b] gets Thermoregulation.
