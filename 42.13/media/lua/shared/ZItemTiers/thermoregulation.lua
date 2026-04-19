@@ -36,7 +36,7 @@ local function applySelfDrying(clothing, thermoreg)
     local newWetness = math.max(0, wetness - dryingPerMinute)
     if newWetness == wetness then return false end
 
-    logger:debug("Drying clothing '%s': wetness %.2f -> %.2f (thermoreg=%.2f)", clothing:getName(), wetness, newWetness, thermoreg)
+    -- logger:debug("Drying clothing '%s': wetness %.2f -> %.2f (thermoreg=%.2f)", clothing:getName(), wetness, newWetness, thermoreg)
     clothing:setWetness(newWetness)
     return true
 end
@@ -83,10 +83,10 @@ local function applyThermoregulatedInsulation(player, clothing, thermoreg)
     if math.abs(targetInsulation - currentInsulation) < 0.001 then return false end
 
     clothing:setInsulation(targetInsulation)
-    logger:debug(
-        "Thermoregulated insulation '%s': %.3f -> %.3f (base=%.3f, temp=%.2fC, thermoreg=%.2f)",
-        clothing:getName(), currentInsulation, targetInsulation, baseInsulation, avgSkinTemp, thermoreg
-    )
+--    logger:debug(
+--        "Thermoregulated insulation '%s': %.3f -> %.3f (base=%.3f, temp=%.2fC, thermoreg=%.2f)",
+--        clothing:getName(), currentInsulation, targetInsulation, baseInsulation, avgSkinTemp, thermoreg
+--    )
     return true
 end
 
